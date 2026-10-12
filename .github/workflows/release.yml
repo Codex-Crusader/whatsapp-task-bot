@@ -45,5 +45,5 @@ jobs:
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
           "$hash  WhatsApp-Task-Bot-Setup-$v.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
           gh release view $env:GITHUB_REF_NAME 2>$null
-          if ($LASTEXITCODE -ne 0) { gh release create $env:GITHUB_REF_NAME --title "WhatsApp Task Bot $v" --generate-notes }
+          if ($LASTEXITCODE -ne 0) { gh release create $env:GITHUB_REF_NAME --title "WhatsApp Task Bot $v" --generate-notes --notes "Download WhatsApp-Task-Bot-Setup-$v.exe below. Code signing policy: https://github.com/Codex-Crusader/whatsapp-task-bot/blob/main/CODE_SIGNING.md" }
           gh release upload $env:GITHUB_REF_NAME $exe dist/SHA256SUMS.txt --clobber

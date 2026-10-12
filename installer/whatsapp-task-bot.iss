@@ -27,9 +27,18 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 LicenseFile=..\LICENSE
+; Shown during installation: what the program sends where.
+InfoBeforeFile=privacy.txt
 SetupIconFile=..\assets\icon.ico
 UninstallDisplayIcon={app}\assets\icon.ico
 UninstallDisplayName={#AppName}
+; File details that the code signing service checks.
+VersionInfoProductName={#AppName}
+VersionInfoProductVersion={#AppVersion}
+VersionInfoVersion={#AppVersion}
+VersionInfoCompany={#AppPublisher}
+VersionInfoDescription={#AppName} Setup
+VersionInfoCopyright=Copyright (C) 2026 {#AppPublisher}. GPL-3.0.
 WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes

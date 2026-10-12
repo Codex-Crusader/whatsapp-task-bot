@@ -358,6 +358,10 @@ Open the "Needs review" tab on the Tasks page. Click "Confirm" if the task is co
 
 </details>
 
+## Code signing policy
+
+The installer is not signed yet. Signing is planned with free code signing from [SignPath.io](https://about.signpath.io) and a certificate by [SignPath Foundation](https://signpath.org). [CODE_SIGNING.md](CODE_SIGNING.md) has the policy, the team roles, and the privacy policy.
+
 ## Report a problem
 
 Open the About page in the dashboard and click "Report a problem" or "Request a feature". The form on GitHub then has your app version. You can also [open an issue](https://github.com/Codex-Crusader/whatsapp-task-bot/issues/new/choose) directly. Do not put message text, phone numbers, email addresses, or keys in an issue, because issues are public. For a security problem, read [SECURITY.md](SECURITY.md) first.

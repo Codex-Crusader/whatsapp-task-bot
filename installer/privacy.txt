@@ -1,0 +1,17 @@
+WhatsApp Task Bot: privacy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
+The program makes a network connection only for a feature that you set up or start:
+
+- WhatsApp: after you link the program to your WhatsApp account. The program only reads messages. It never sends a message.
+- Google Calendar: after you upload a Google key and enter a Calendar ID. Your tasks go to your own calendar.
+- Gmail: after you enter a Gmail address and an App Password. The daily report goes to your own address.
+- GitHub: when you click "Check for updates" on the About page.
+- Ollama and winget: when you click "Install Ollama" or "Download the model" in the setup.
+
+The language model operates on this computer. Message text does not go to a cloud service. The original message text goes to Google Calendar only if you turn that on in Settings.
+
+Your personal data stays in %LOCALAPPDATA%\WhatsApp Task Bot. The uninstaller asks if it must delete it.
+
+Full details: https://github.com/Codex-Crusader/whatsapp-task-bot/blob/main/SECURITY.md
