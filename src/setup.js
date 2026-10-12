@@ -92,10 +92,18 @@ export function createSetup({ store, config = liveConfig, env = liveEnv, status,
     };
     for (const k of Object.keys(patch)) if (patch[k] === undefined) delete patch[k];
     for (const k of Object.keys(patch.retention)) if (patch.retention[k] === undefined) delete patch.retention[k];
+    const hadOriginal = config.includeOriginalMessage;
     try {
       saveConfig(patch, config, files.config);
     } catch (err) {
       throw httpError(400, err.message);
+    }
+    // The event text changed: rewrite the existing events, so that turning this off
+    // also removes the message text that is already in Google Calendar.
+    if (hadOriginal !== config.includeOriginalMessage) {
+      const n = store.s.markEventsDirty.run().changes;
+      log.info('setup: original message setting changed, events to rewrite', { events: n });
+      calendar?.sync().catch((err) => log.error('setup: calendar sync failed', { err: err.message }));
     }
     log.info('setup: settings saved');
     onProfileSaved();
@@ -304,7 +312,7 @@ function settingsBody(c) {
   return `<form id="settings-form" class="panel"><div class="panel-b">
 ${sec('Your names', 'The bot marks messages that use these names.', field('myName', 'Your name in WhatsApp', c.myName, '', 'text', 'maxlength="80" required') + area('aliases', 'Other names', c.aliases, 'One name on each line.'))}
 ${sec('Messages', 'Which chats the bot reads, and which words mark a possible task.', area('ignoredChats', 'Chats to ignore', c.ignoredChats, 'One chat name or chat ID on each line. The bot does not read these chats.') + area('taskWords', 'Task words', c.taskWords, 'For example "deadline". One word or phrase on each line.') + area('everyoneWords', 'Group words', c.everyoneWords, 'Words that mark a task for the whole group.'))}
-${sec('Timing', 'When the bot checks for messages and sends the report.', `<div class="row2">${field('emailTime', 'Daily report time', c.emailTime, '', 'time', 'required')}${field('batchIntervalMinutes', 'Check every (minutes)', c.batchIntervalMinutes, '', 'number', 'min="1" max="1440" required')}</div><div class="row2">${field('skipThreshold', 'Quiet chats wait for', c.skipThreshold, 'Messages, before the bot reads them.', 'number', 'min="1" max="1000" required')}${field('confidenceThreshold', 'Low-confidence limit', c.confidenceThreshold, 'From 0 to 1. Tasks below it get "?".', 'number', 'min="0" max="1" step="0.05" required')}</div><label class="check"><input type="checkbox" id="includeOriginalMessage" ${c.includeOriginalMessage ? 'checked' : ''}> Put the original message in the calendar event</label>`)}
+${sec('Timing', 'When the bot checks for messages and sends the report.', `<div class="row2">${field('emailTime', 'Daily report time', c.emailTime, '', 'time', 'required')}${field('batchIntervalMinutes', 'Check every (minutes)', c.batchIntervalMinutes, '', 'number', 'min="1" max="1440" required')}</div><div class="row2">${field('skipThreshold', 'Quiet chats wait for', c.skipThreshold, 'Messages, before the bot reads them.', 'number', 'min="1" max="1000" required')}${field('confidenceThreshold', 'Low-confidence limit', c.confidenceThreshold, 'From 0 to 1. Tasks below it get a "Needs review" warning and "?" in the calendar.', 'number', 'min="0" max="1" step="0.05" required')}</div><label class="check"><input type="checkbox" id="includeOriginalMessage" ${c.includeOriginalMessage ? 'checked' : ''}> Put the original message in the calendar event</label><p class="hint">Off by default. When it is on, the full message text goes to Google. When you change it, the bot rewrites the events that already exist.</p>`)}
 ${sec('Data retention', 'How long the bot keeps data on this computer. Tasks stay until you delete them.', `<div class="row2">${field('messageHours', 'Message text (hours)', c.retention.messageHours, '', 'number', 'min="1" required')}${field('reportDays', 'Reports (days)', c.retention.reportDays, '', 'number', 'min="1" required')}</div>${field('processedDays', 'Processed message IDs (days)', c.retention.processedDays, '', 'number', 'min="1" required')}`)}
 <div class="form-actions"><button type="submit" class="btn primary">Save settings</button></div>
 </div></form>

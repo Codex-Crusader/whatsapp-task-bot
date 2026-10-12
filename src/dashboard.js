@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { snapshot } from './status.js';
 import { localDay } from './store.js';
+import { TAGS } from './extractor.js';
 import { ROOT, HOME, VERSION, REPO_URL, AUTHOR } from './config.js';
 import { release } from 'node:os';
 import { CATCH_UP_DAYS } from './scheduler.js';
@@ -45,9 +46,9 @@ const NAV = [['Overview', [['/', 'Status']]], ['Work', [['/tasks', 'Tasks'], ['/
 
 const CSS = `
 :root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--sunken:#f1f2f5;--text:#14161a;--muted:#5f6573;--faint:#8b91a0;--line:#e4e6eb;--line2:#d4d7de;
---ink:#16181d;--on-ink:#fff;--focus:#3b6fe0;--ok:#1a7f4b;--ok-bg:#e7f4ec;--warn:#985a00;--warn-bg:#fbf1dd;--bad:#b42318;--bad-bg:#fcebe9;--hover:#f7f8fa}
+--ink:#16181d;--on-ink:#fff;--focus:#3b6fe0;--ok:#1a7f4b;--ok-bg:#e7f4ec;--warn:#985a00;--warn-bg:#fbf1dd;--soon:#c2410c;--soon-bg:#fdeee4;--bad:#b42318;--bad-bg:#fcebe9;--hover:#f7f8fa}
 @media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#0d0e11;--panel:#141619;--sunken:#1b1d22;--text:#e7e9ed;--muted:#a0a6b1;--faint:#6f7684;--line:#24272d;--line2:#33373e;
---ink:#e7e9ed;--on-ink:#0d0e11;--focus:#7aa2ff;--ok:#4cc38a;--ok-bg:#12291d;--warn:#e2aa4f;--warn-bg:#2c2312;--bad:#f27a6b;--bad-bg:#321818;--hover:#181a1e}}
+--ink:#e7e9ed;--on-ink:#0d0e11;--focus:#7aa2ff;--ok:#4cc38a;--ok-bg:#12291d;--warn:#e2aa4f;--warn-bg:#2c2312;--soon:#fb923c;--soon-bg:#2d1a0f;--bad:#f27a6b;--bad-bg:#321818;--hover:#181a1e}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--text);font:13.5px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
 a{color:var(--text);text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}a:hover{text-decoration-color:currentColor}
@@ -100,7 +101,13 @@ input[type=file]::file-selector-button:hover{background:var(--sunken)}
 table{width:100%;border-collapse:collapse}th{font-size:12px;font-weight:500;color:var(--muted);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;font-variant-numeric:tabular-nums}tr:last-child td{border-bottom:0}
 tbody tr:hover,table tr.task:hover,table tr.mine:hover,table tr.done:hover{background:var(--hover)}
-td.c,th.c{width:36px;padding-right:0}td.t{min-width:220px}tr.mine td.t{font-weight:600}tr.done td.t{color:var(--faint);text-decoration:line-through}
+td.c,th.c{width:36px;padding-right:0}
+.badge.soon{background:var(--soon-bg);color:var(--soon)}
+tr.dl-over td.c{box-shadow:inset 3px 0 var(--bad)}tr.dl-soon td.c{box-shadow:inset 3px 0 var(--soon)}tr.dl-near td.c{box-shadow:inset 3px 0 var(--warn)}
+.tline{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:4px;font-weight:400}
+.tag{display:inline-flex;align-items:center;height:18px;padding:0 6px;border:1px solid var(--line2);border-radius:9px;font-size:11.5px;color:var(--muted);text-decoration:none;text-transform:capitalize}a.tag:hover{color:var(--text);border-color:var(--muted)}
+.why{font-size:12px;color:var(--warn)}
+.filters .search{width:200px}.toolbar{flex-wrap:wrap}.filters{flex-wrap:wrap}td.t{min-width:220px}tr.mine td.t{font-weight:600}tr.done td.t{color:var(--faint);text-decoration:line-through}
 td.dim,.dim{color:var(--faint)}.acts{display:flex;gap:2px;justify-content:flex-end}th.r,td.r{text-align:right}
 .table-scroll{overflow-x:auto}
 .pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-top:1px solid var(--line);color:var(--muted)}
@@ -199,7 +206,7 @@ async function load(){
  +'<div class="cols">'
  +panel('WhatsApp',[kv('Connection',c.whatsapp,wa,'since '+when(s.whatsapp.since)),kv('Last message',c.lastMessage,when(s.whatsapp.lastMessageAt),ago(s.whatsapp.lastMessageAt)),kv('Messages since start',s.ingest.stored?'ok':'idle',s.ingest.stored+' stored',s.ingest.stored?s.ingest.seen+' seen, '+s.ingest.dropped+' noise':'your chats can be quiet')])
  +panel('Processing',[kv('Last batch',c.lastBatch,s.batch.result?esc(s.batch.result.replace(/^ok: /,'')):'Not yet',s.batch.lastAt?when(s.batch.lastAt)+', '+((s.batch.durationMs||0)/1000).toFixed(1)+' s':''),kv('Last complete run',c.lastRun,when(s.batch.lastRun),ago(s.batch.lastRun)),kv('Next batch',c.nextBatch,s.batch.running?'Running now':when(s.batch.nextAt),s.batch.running?'':ago(s.batch.nextAt)),kv('Language model',c.ollama,ollama,s.ollama.checkedAt?'checked '+ago(s.ollama.checkedAt):'')])
- +panel('Delivery',[kv('Tasks found',s.batch.tasksFound?'ok':'idle',(s.batch.tasksFound||0)+' tasks, '+(s.batch.mineFound||0)+' for you',s.batch.lastTaskAt?'last '+ago(s.batch.lastTaskAt):'none yet'),kv('Calendar',c.calendar,s.calendar.lastWriteAt?when(s.calendar.lastWriteAt):'No writes yet',s.calendar.ok===false?'last write failed':s.calendar.lastWriteAt?ago(s.calendar.lastWriteAt):'waits for a task with a date'),kv('Last email',c.email,s.email.lastSentDate?esc(s.email.lastSentDate):'None yet',s.email.ok===false?'last try failed; retry in 10 min':s.email.lastSentDate?'':'first report at the report time'),kv('Next report',c.nextEmail,when(s.email.nextAt),ago(s.email.nextAt))])
+ +panel('Delivery',[kv('Tasks found',s.batch.tasksFound?'ok':'idle',(s.batch.tasksFound||0)+' tasks, '+(s.batch.mineFound||0)+' for you',s.batch.lastTaskAt?'last '+ago(s.batch.lastTaskAt):'none yet'),kv('Calendar',c.calendar,s.calendar.lastWriteAt?when(s.calendar.lastWriteAt):'No writes yet',s.calendar.ok===false?'last write failed':s.calendar.lastWriteAt?ago(s.calendar.lastWriteAt):'waits for a task with a date'),kv('Last email',c.email,s.email.lastSentDate?esc(s.email.lastSentDate):'None yet',s.email.ok===false?'last try failed; retry in 10 min':s.email.lastSentDate?'':'first report at the report time'),kv('Next report',c.nextEmail,when(s.email.nextAt),ago(s.email.nextAt)),kv('Needs review','idle',s.reviewCount?'<a href="/tasks?s=review">'+s.reviewCount+(s.reviewCount===1?' task':' tasks')+'</a>':'None',s.reviewCount?'in the calendar with "?"':'')])
  +panel('System',[kv('Memory',c.ram,(s.rssBytes/1048576).toFixed(0)+' MB','target: less than 150 MB'),kv('Database',c.db,(s.dbBytes/1048576).toFixed(1)+' MB'),kv('Uptime','ok',s.uptimeSec<3600?Math.round(s.uptimeSec/60)+' min':(s.uptimeSec/3600).toFixed(1)+' h')])
  +'</div><section class="panel"><div class="panel-h">Recent errors<span class="meta">last 20</span></div>'
  +(s.errors.length?'<div class="table-scroll"><table><tr><th>Time</th><th>Source</th><th>Message</th></tr>'+s.errors.map(e=>'<tr class="task"><td class="dim">'+when(e.at)+'</td><td><span class="badge">'+esc(e.source)+'</span></td><td>'+esc(e.message)+'</td></tr>').join('')+'</table></div>':'<div class="empty">No errors.</div>')+'</section>';
@@ -217,6 +224,19 @@ const cu=$('check-update');if(cu)cu.addEventListener('click',async()=>{const out
   else if(j.newer)out.innerHTML='Version '+esc(j.latest)+' is available. <a href="'+esc(j.url)+'" target="_blank" rel="noopener noreferrer">Download</a>';
   else out.textContent='You have the latest version.'}catch(e){out.textContent='Could not check.'}cu.disabled=false});
 document.querySelectorAll('select[data-autosubmit]').forEach(x=>x.addEventListener('change',()=>x.form.submit()));
+// Deadline colors: red when overdue, orange within 24 hours, yellow within 3 days.
+// A date without a time counts until the end of that day. Updated every minute.
+function deadlines(){const now=Date.now(),H=3600000,D=24*H;
+ const span=(ms)=>ms<H?Math.max(1,Math.round(ms/60000))+' min':ms<D?Math.round(ms/H)+' h':Math.round(ms/D)+(Math.round(ms/D)===1?' day':' days');
+ const todayStr=new Date().toLocaleDateString('en-CA');
+ document.querySelectorAll('tr[data-watch]').forEach(tr=>{const v=tr.dataset.due;const [y,m,d]=v.slice(0,10).split('-').map(Number);
+  const at=tr.dataset.watch==='time'?new Date(y,m-1,d,Number(v.slice(11,13)),Number(v.slice(14,16))).getTime():new Date(y,m-1,d,23,59,59).getTime();
+  const left=at-now;const cls=left<0?'dl-over':left<D?'dl-soon':left<3*D?'dl-near':'';
+  tr.classList.remove('dl-over','dl-soon','dl-near');if(cls)tr.classList.add(cls);
+  const lab=tr.querySelector('.due-label');if(!lab)return;
+  const rel=left<0?'Overdue by '+span(-left):tr.dataset.watch==='day'&&v.slice(0,10)===todayStr?'Due today':'Due in '+span(left);
+  lab.className='due-label badge'+(left<0?' bad':left<D?' soon':left<3*D?' warn':'');lab.textContent=rel;lab.title=v.replace('T',' ')});}
+if(document.querySelector('tr[data-watch]')){deadlines();setInterval(deadlines,60000)}
 const tbl=$('tasks-table');
 if(tbl){
  const boxes=()=>[...document.querySelectorAll('input.sel')];
@@ -226,7 +246,7 @@ if(tbl){
  try{const m=sessionStorage.getItem('flash');if(m){sessionStorage.removeItem('flash');toast(m)}}catch(e){}
  async function post(path,body){busy(1);setTimeout(()=>busy(-1),600);const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-bot-action':'1'},body:JSON.stringify(body)});let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw new Error(j.error||('Error '+r.status));return j}
  const done=(m)=>{try{sessionStorage.setItem('flash',m)}catch(e){}location.reload()};
- const NAMES={done:'Marked as done',reopen:'Opened again',delete:'Deleted',restore:'Restored'};
+ const NAMES={done:'Marked as done',reopen:'Opened again',delete:'Deleted',restore:'Restored',confirm:'Confirmed'};
  async function bulk(action,ids){if(!ids.length)return;try{const j=await post('/api/tasks/bulk',{action,ids});done(NAMES[action]+': '+j.changed+(j.changed===1?' task':' tasks'))}catch(e){toast(e.message,true)}}
  let pendingDelete=[];
  function askDelete(ids){if(!ids.length)return;pendingDelete=ids;$('confirm-text').textContent='Delete '+ids.length+(ids.length===1?' task':' tasks')+'? The calendar event is removed too. You can restore deleted tasks from the "Deleted" view.';$('confirm-dlg').showModal()}
@@ -236,12 +256,12 @@ if(tbl){
  who.addEventListener('change',sync);nodate.addEventListener('change',sync);
  function openEdit(tr){const d=tr.dataset;$('e-id').value=d.id;$('e-title').value=d.title;
   const a=d.assignee;if(['me','everyone','unclear'].includes(a)){who.value=a;other.value=''}else{who.value='other';other.value=a}
-  $('e-date').value=d.due?d.due.slice(0,10):'';$('e-time').value=d.due&&d.due.length>10?d.due.slice(11,16):'';nodate.checked=!d.due;sync();$('edit-dlg').showModal();$('e-title').focus()}
+  $('e-tag').value=d.tag||'other';$('e-date').value=d.due?d.due.slice(0,10):'';$('e-time').value=d.due&&d.due.length>10?d.due.slice(11,16):'';nodate.checked=!d.due;sync();$('edit-dlg').showModal();$('e-title').focus()}
  $('edit-form').addEventListener('submit',async(e)=>{e.preventDefault();
   const assignee=who.value==='other'?other.value.trim():who.value;
   if(!assignee){toast('Enter the name of the person.',true);return}
   let due=null;if(!nodate.checked){const dt=$('e-date').value;if(!dt){toast('Choose a date, or select "No date".',true);return}due=$('e-time').value?dt+'T'+$('e-time').value:dt}
-  try{await post('/api/tasks/update',{id:Number($('e-id').value),title:$('e-title').value.trim(),assignee,due});$('edit-dlg').close();done('Saved. Google Calendar is updated.')}catch(err){toast(err.message,true)}});
+  try{await post('/api/tasks/update',{id:Number($('e-id').value),title:$('e-title').value.trim(),assignee,due,tag:$('e-tag').value});$('edit-dlg').close();done('Saved. Google Calendar is updated.')}catch(err){toast(err.message,true)}});
  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));
  document.addEventListener('change',(e)=>{if(e.target.id==='all')boxes().forEach(x=>{x.checked=e.target.checked});if(e.target.id==='all'||e.target.classList.contains('sel'))upd()});
  document.addEventListener('click',(e)=>{const b=e.target.closest('[data-act]');if(!b)return;const act=b.dataset.act;
@@ -328,6 +348,7 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
     const lastMsgAge = s.whatsapp.lastMessageAt ? now - s.whatsapp.lastMessageAt : null;
     const unlinked = ['not linked', 'link failed', 'logged out'].includes(s.whatsapp.state);
     s.setupNeeded = !config.myName || unlinked;
+    s.reviewCount = store.s.reviewCount.get();
     s.whatsapp = { ...s.whatsapp }; // a copy: the live object keeps the pairing code for the setup page
     delete s.whatsapp.pairingCode;
     s.checks = {
@@ -396,65 +417,89 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
       { title: prettyDay(day), crumb: '<a href="/reports">Reports</a> /', sub: 'The same report that the email showed.' });
   }
 
-  const STATUSES = { open: 'Open', done: 'Done', deleted: 'Deleted', all: 'All' };
+  const STATUSES = { open: 'Open', review: 'Needs review', done: 'Done', deleted: 'Deleted', all: 'All' };
   const FILTERS = { all: 'Everyone', mine: 'Mine', everyone: 'For the group', others: 'Others and unclear' };
   const DUES = { all: 'Any date', overdue: 'Overdue', today: 'Today', week: 'Next 7 days', upcoming: 'Today and later', nodate: 'No date' };
+  const SORTS = { mine: 'Mine first', due: 'Due date', newest: 'Newest', chat: 'Chat' };
+  const own = (map, v) => (Object.hasOwn(map, v) ? v : null);
+  const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  const OURS = new Set(['me', 'everyone', 'unclear']);
 
   function tasksPage(q) {
-    const st = q.get('s') in STATUSES ? q.get('s') : 'open';
-    const f = q.get('f') in FILTERS ? q.get('f') : 'all';
-    const d = q.get('due') in DUES ? q.get('due') : 'all';
+    const st = own(STATUSES, q.get('s')) ?? 'open';
+    const f = own(FILTERS, q.get('f')) ?? 'all';
+    const d = own(DUES, q.get('due')) ?? 'all';
+    const sort = own(SORTS, q.get('sort')) ?? 'mine';
+    const tag = TAGS.includes(q.get('tag')) ? q.get('tag') : '';
+    const chats = store.s.chatNames.all();
+    const chat = chats.some((c) => c.chat_name === q.get('chat')) ? q.get('chat') : '';
+    const text = String(q.get('q') ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 100);
     const pageNo = Math.max(1, Number.parseInt(q.get('page'), 10) || 1);
     const today = localDay();
-    const nowD = new Date();
-    const nowHHMM = `${String(nowD.getHours()).padStart(2, '0')}:${String(nowD.getMinutes()).padStart(2, '0')}`;
     const week = localDay(Date.now() + 7 * 24 * 3600 * 1000);
-    const params = { s: st, f, d, today, week, off: (pageNo - 1) * 50 };
+    // LIKE: "!" escapes the wildcard characters that the person typed.
+    const like = text ? `%${text.replace(/[!%_]/g, (c) => `!${c}`)}%` : '';
+    const params = { s: st, f, d, today, week, tag, chat, q: like, off: (pageNo - 1) * 50 };
     const total = store.s.tasksCount.get(params);
-    const rows = store.s.tasksPage.all(params);
+    const rows = store.s.tasksPage[sort].all(params);
     const pages = Math.max(1, Math.ceil(total / 50));
-    const link = (o) => `/tasks?s=${o.s ?? st}&f=${o.f ?? f}&due=${o.d ?? d}&page=${o.p ?? 1}`;
-    const select = (name, map, cur) => `<select class="in" name="${name}" data-autosubmit aria-label="${name === 'f' ? 'Person' : 'Due date'}">${Object.entries(map).map(([k, v]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${v}</option>`).join('')}</select>`;
-    const due = (t) => {
-      if (!t.due) return '<span class="dim">—</span>';
-      const day = t.due.slice(0, 10);
-      const text = esc(t.due.replace('T', ' '));
-      if (t.status !== 'open') return `<span class="dim">${text}</span>`;
-      // Overdue: an earlier day, or a time today that is past.
-      const past = day < today || (day === today && t.due_kind === 'datetime' && t.due.slice(11) < nowHHMM);
-      if (past && taskStatus(t) !== 'Not yours') return `<span class="badge bad">${text}</span>`;
-      if (day === today) return `<span class="badge warn">Today${t.due_kind === 'datetime' ? ` ${esc(t.due.slice(11))}` : ''}</span>`;
-      return text;
-    };
+    // Every link keeps every filter, so a tab or the next page does not reset them.
+    const cur = { s: st, f, due: d, tag, chat, q: text, sort };
+    const link = (o = {}) => `/tasks?${new URLSearchParams(Object.entries({ ...cur, ...o }).filter(([, v]) => v !== '' && v != null && v !== 1)).toString()}`;
+    const clear = { f: '', due: '', tag: '', chat: '', q: '' };
+    const filtered = f !== 'all' || d !== 'all' || tag || chat || text;
+    const opts = (map, now) => Object.entries(map).map(([k, v]) => `<option value="${esc(k)}"${k === now ? ' selected' : ''}>${esc(v)}</option>`).join('');
+    const select = (name, label, inner) => `<select class="in" name="${name}" data-autosubmit aria-label="${label}">${inner}</select>`;
+    const tagCounts = Object.fromEntries(store.s.tagCounts.all().map((r) => [r.tag, r.n]));
+    const tagOpts = `<option value="">Any tag</option>${TAGS.filter((t) => tagCounts[t]).map((t) => `<option value="${t}"${t === tag ? ' selected' : ''}>${cap(t)} (${tagCounts[t]})</option>`).join('')}`;
+    const chatOpts = `<option value="">Any chat</option>${chats.map((c) => `<option value="${esc(c.chat_name)}"${c.chat_name === chat ? ' selected' : ''}>${esc(c.chat_name)} (${c.n})</option>`).join('')}`;
+    // The page script turns the due cell into "Due in 3 h" and colors the row as the time comes closer.
+    const due = (t) => (t.due ? `<span class="due-label">${esc(t.due.replace('T', ' '))}</span>` : '<span class="dim">—</span>');
+    const watch = (t) => t.status === 'open' && !!t.due && OURS.has(t.assignee);
     const who = (t) => (t.assignee === 'me' ? '<span class="badge ink">You</span>' : esc(WHO(t.assignee)));
     const acts = (t) => (t.status === 'deleted'
       ? '<button class="btn ghost sm" data-act="restore">Restore</button>'
-      : `<button class="btn ghost sm" data-act="edit">Edit</button>${t.status === 'done' ? '<button class="btn ghost sm" data-act="reopen">Reopen</button>' : '<button class="btn ghost sm" data-act="done">Done</button>'}<button class="btn ghost sm danger" data-act="delete">Delete</button>`);
-    const row = (t) => `<tr class="${t.assignee === 'me' && t.status === 'open' ? 'mine' : t.status === 'done' ? 'done' : 'task'}" data-id="${t.id}" data-title="${esc(t.title)}" data-assignee="${esc(t.assignee)}" data-due="${esc(t.due ?? '')}">`
-      + `<td class="c"><input type="checkbox" class="sel" value="${t.id}" aria-label="Select task"></td><td class="t">${esc(t.title)}</td><td>${who(t)}</td><td class="dim">${esc(t.chat_name)}</td><td>${due(t)}</td>`
+      : `${t.flagged ? '<button class="btn ghost sm" data-act="confirm" title="The task is right: remove the warning and the ? in the calendar">Confirm</button>' : ''}<button class="btn ghost sm" data-act="edit">Edit</button>${t.status === 'done' ? '<button class="btn ghost sm" data-act="reopen">Reopen</button>' : '<button class="btn ghost sm" data-act="done">Done</button>'}<button class="btn ghost sm danger" data-act="delete">Delete</button>`);
+    const reason = (t) => t.review_reason || (t.assignee === 'unclear' ? 'Unclear who must do it' : 'Low confidence');
+    const line = (t) => {
+      const parts = [];
+      if (t.tag) parts.push(`<a class="tag" href="${esc(link({ tag: t.tag, page: '' }))}" title="Show all ${esc(t.tag)} tasks">${esc(t.tag)}</a>`);
+      if (t.flagged && t.status !== 'deleted') parts.push(`<span class="badge warn">Needs review</span><span class="why">${esc(reason(t))}</span>`);
+      return parts.length ? `<div class="tline">${parts.join('')}</div>` : '';
+    };
+    const row = (t) => `<tr class="${t.assignee === 'me' && t.status === 'open' ? 'mine' : t.status === 'done' ? 'done' : 'task'}" data-id="${t.id}" data-title="${esc(t.title)}" data-assignee="${esc(t.assignee)}" data-due="${esc(t.due ?? '')}" data-tag="${esc(t.tag ?? 'other')}"${watch(t) ? ` data-watch="${t.due_kind === 'datetime' ? 'time' : 'day'}"` : ''}>`
+      + `<td class="c"><input type="checkbox" class="sel" value="${t.id}" aria-label="Select task"></td><td class="t">${esc(t.title)}${line(t)}</td><td>${who(t)}</td><td class="dim">${esc(t.chat_name)}</td><td>${due(t)}</td>`
       + `<td><span class="badge ${STATUS_BADGE[taskStatus(t)]}">${taskStatus(t)}</span></td><td class="dim">${esc(t.day)}</td><td class="r"><div class="acts">${acts(t)}</div></td></tr>`;
     const first = total ? (pageNo - 1) * 50 + 1 : 0;
+    const empty = st === 'review' && !filtered ? 'No tasks need a review.' : st === 'open' && !filtered ? 'No open tasks. New tasks show here when the bot finds them.' : 'No tasks for this filter.';
     const table = rows.length
       ? `<div class="table-scroll"><table id="tasks-table"><tr><th class="c"><input type="checkbox" id="all" aria-label="Select all on this page"></th><th>Task</th><th>Assigned to</th><th>Chat</th><th>Due</th><th>Status</th><th>Found</th><th class="r"></th></tr>${rows.map(row).join('')}</table></div>`
-      : `<div class="empty" id="tasks-table">${st === 'open' && f === 'all' && d === 'all' ? 'No open tasks. New tasks show here when the bot finds them.' : 'No tasks for this filter.'}</div>`;
+      : `<div class="empty" id="tasks-table">${empty}${filtered ? ` <a href="${esc(link({ ...clear, page: '' }))}">Clear the filters</a>` : ''}</div>`;
     const bulkButtons = st === 'deleted'
       ? '<button class="btn sm" data-act="bulk-restore">Restore</button>'
-      : '<button class="btn sm" data-act="bulk-done">Mark as done</button><button class="btn sm" data-act="bulk-reopen">Reopen</button><button class="btn sm danger" data-act="bulk-delete">Delete</button>';
-    const pager = `<div class="pager"><span>${first ? `${first}–${Math.min(total, pageNo * 50)} of ${total}` : '0 tasks'} · Page ${pageNo} of ${pages} (${total} tasks)</span><span class="filters"><a class="btn sm${pageNo > 1 ? '' : ' off'}" href="${link({ p: pageNo - 1 })}">Previous</a><a class="btn sm${pageNo < pages ? '' : ' off'}" href="${link({ p: pageNo + 1 })}">Next</a></span></div>`;
-    const toolbar = `<div class="toolbar"><nav class="seg" aria-label="Task status">${Object.entries(STATUSES).map(([k, v]) => `<a href="${link({ s: k })}"${k === st ? ' class="on" aria-current="true"' : ''}>${v}</a>`).join('')}</nav>`
-      + `<form class="filters" method="get" action="/tasks"><input type="hidden" name="s" value="${st}">${select('f', FILTERS, f)}${select('due', DUES, d)}<noscript><button class="btn sm">Apply</button></noscript></form><span class="grow"></span></div>`;
+      : '<button class="btn sm" data-act="bulk-confirm">Confirm</button><button class="btn sm" data-act="bulk-done">Mark as done</button><button class="btn sm" data-act="bulk-reopen">Reopen</button><button class="btn sm danger" data-act="bulk-delete">Delete</button>';
+    const pager = `<div class="pager"><span>${first ? `${first}–${Math.min(total, pageNo * 50)} of ${total}` : '0 tasks'} · Page ${pageNo} of ${pages} (${total} tasks)</span><span class="filters"><a class="btn sm${pageNo > 1 ? '' : ' off'}" href="${esc(link({ page: pageNo - 1 }))}">Previous</a><a class="btn sm${pageNo < pages ? '' : ' off'}" href="${esc(link({ page: pageNo + 1 }))}">Next</a></span></div>`;
+    const reviewN = store.s.reviewCount.get();
+    const tabs = Object.entries(STATUSES).map(([k, v]) => `<a href="${esc(link({ s: k, page: '' }))}"${k === st ? ' class="on" aria-current="true"' : ''}>${v}${k === 'review' && reviewN ? ` (${reviewN})` : ''}</a>`).join('');
+    const hidden = (k, v) => (v ? `<input type="hidden" name="${k}" value="${esc(v)}">` : '');
+    const toolbar = `<div class="toolbar"><nav class="seg" aria-label="Task status">${tabs}</nav>`
+      + `<form class="filters" method="get" action="/tasks">${hidden('s', st)}<input class="in search" type="search" name="q" value="${esc(text)}" placeholder="Search tasks, chats, people" aria-label="Search">`
+      + `${select('f', 'Person', opts(FILTERS, f))}${select('due', 'Due date', opts(DUES, d))}${select('tag', 'Tag', tagOpts)}${select('chat', 'Chat', chatOpts)}${select('sort', 'Sort', opts(SORTS, sort))}`
+      + `${filtered ? `<a class="btn ghost sm" href="${esc(link({ ...clear, page: '' }))}">Clear filters</a>` : ''}<noscript><button class="btn sm">Apply</button></noscript></form></div>`;
+    const tagSelect = TAGS.map((t) => `<option value="${t}">${cap(t)}</option>`).join('');
     const dialogs = `<div class="bulk" id="bulk" hidden><span id="bulk-count"></span><span class="grow"></span>${bulkButtons}</div>
 <dialog id="edit-dlg"><form id="edit-form"><div class="dlg-b"><h3>Edit task</h3><input type="hidden" id="e-id">
 <div class="field"><label for="e-title">Task</label><input id="e-title" maxlength="200" required></div>
-<div class="field"><label for="e-who">Assigned to</label><select id="e-who"><option value="me">You</option><option value="everyone">Everyone in the group</option><option value="unclear">Unclear</option><option value="other">Another person</option></select><input id="e-other" maxlength="60" placeholder="Name of the person" hidden></div>
+<div class="row2"><div class="field"><label for="e-who">Assigned to</label><select id="e-who"><option value="me">You</option><option value="everyone">Everyone in the group</option><option value="unclear">Unclear</option><option value="other">Another person</option></select><input id="e-other" maxlength="60" placeholder="Name of the person" hidden></div>
+<div class="field"><label for="e-tag">Tag</label><select id="e-tag">${tagSelect}</select></div></div>
 <div class="row2"><div class="field"><label for="e-date">Due date</label><input type="date" id="e-date"></div><div class="field"><label for="e-time">Time <span class="hint">optional</span></label><input type="time" id="e-time"></div></div>
 <label class="check"><input type="checkbox" id="e-nodate"> No date</label>
-<p class="hint">Tasks for you, for the group, or unclear, with a date, get a calendar event. Another person's task has no event.</p></div>
+<p class="hint">Tasks for you, for the group, or unclear, with a date, get a calendar event. Another person's task has no event. Saving also removes the "Needs review" warning.</p></div>
 <div class="dlg-f"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn primary">Save changes</button></div></form></dialog>
 <dialog id="confirm-dlg"><div class="dlg-b"><h3>Delete tasks</h3><p id="confirm-text" class="sub"></p></div><div class="dlg-f"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn danger solid" id="confirm-ok">Delete</button></div></dialog>
 <div class="toast" id="toast" hidden></div>`;
     return page('Tasks', 'Tasks', `${toolbar}<section class="panel">${table}${pager}</section>${dialogs}`, '',
-      { title: 'Tasks', sub: 'Your open tasks come first. Changes go to Google Calendar at once.' });
+      { title: 'Tasks', sub: 'Your open tasks come first. Changes go to Google Calendar at once. The colored edge shows how close a deadline is.' });
   }
 
   // ---- task changes (POST, same-origin JSON only) ----
@@ -497,17 +542,18 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
     if (due !== null && !validDue(due)) throw httpError(400, 'The date is not valid.');
     const task = store.s.taskById.get(id);
     if (!task || task.status === 'deleted') throw httpError(404, 'Task not found');
-    store.s.updateTask.run({ id, title, assignee, due, due_kind: due ? (due.length > 10 ? 'datetime' : 'date') : null, now: Date.now() });
+    const tag = TAGS.includes(b.tag) ? b.tag : task.tag ?? 'other';
+    store.s.updateTask.run({ id, title, assignee, due, due_kind: due ? (due.length > 10 ? 'datetime' : 'date') : null, tag, now: Date.now() });
     log.info('dashboard: task edited', { id });
     kickCalendar();
     return { ok: true };
   }
 
   // Allowed status changes for each action.
-  const ACTIONS = { done: { from: ['open'], to: 'done' }, reopen: { from: ['done'], to: 'open' }, delete: { from: ['open', 'done'], to: 'deleted' }, restore: { from: ['deleted'], to: 'open' } };
+  const ACTIONS = { done: { from: ['open'], to: 'done' }, reopen: { from: ['done'], to: 'open' }, delete: { from: ['open', 'done'], to: 'deleted' }, restore: { from: ['deleted'], to: 'open' }, confirm: { from: ['open', 'done'] } };
 
   function bulkTasks(b) {
-    const rule = ACTIONS[b.action];
+    const rule = Object.hasOwn(ACTIONS, b.action) ? ACTIONS[b.action] : null;
     if (!rule) throw httpError(400, 'Unknown action');
     if (!Array.isArray(b.ids) || !b.ids.length || b.ids.length > 500 || !b.ids.every((x) => Number.isInteger(x) && x > 0)) throw httpError(400, 'Bad task ids');
     const now = Date.now();
@@ -515,7 +561,8 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
       let n = 0;
       for (const id of new Set(b.ids)) {
         const t = store.s.taskById.get(id);
-        if (t && rule.from.includes(t.status)) n += store.s.setTaskStatus.run({ id, status: rule.to, now }).changes;
+        if (!t || !rule.from.includes(t.status)) continue;
+        n += b.action === 'confirm' ? store.s.confirmTask.run({ id, now }).changes : store.s.setTaskStatus.run({ id, status: rule.to, now }).changes;
       }
       return n;
     })();

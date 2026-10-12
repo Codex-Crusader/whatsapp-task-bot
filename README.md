@@ -149,9 +149,16 @@ A graphics card with 6 GB of video memory or more makes the model faster. The bo
 
 | Data | Where it goes |
 |---|---|
+The language model operates on your computer, but tasks and the report leave it when you set up the calendar and the email:
+
+| Data | Where it goes |
+|---|---|
 | Message text | Only this computer: the local database and Ollama. Kept for 48 hours. |
-| Task title, chat name, sender, original message | Your own "WhatsApp Tasks" calendar. You can turn off the original message in Settings. |
+| Task title, chat name, sender, date | Your own "WhatsApp Tasks" calendar. |
+| Original message text | Nowhere, by default. You can turn it on in Settings, and then it goes to the calendar event too. |
 | Daily report | Your Gmail address. |
+
+[SECURITY.md](SECURITY.md) lists how long the bot keeps each kind of data, and what to do if the computer is lost.
 
 The dashboard listens only on `127.0.0.1`, and every page needs a secret access link. Secrets stay in `.env` and `keys\`, which git ignores, and the dashboard never sends them to the browser. npm runs no install scripts from dependencies. [SECURITY.md](SECURITY.md) has the details.
 
@@ -166,7 +173,7 @@ npm run dashboard-url
 | Page | What it shows |
 |---|---|
 | Status | The WhatsApp connection, the batches, the language model, the calendar, the email, memory, and recent errors. Green operates, red is a problem, gray did not occur yet. |
-| Tasks | All tasks, with filters for the status, the person, and the due date. Edit, complete, delete, and restore tasks, one at a time or many at once. |
+| Tasks | All tasks, with a tag for each (assignment, exam, payment, and more). Search, and filter by status, person, due date, tag, and chat. Sort by person, date, newest, or chat. A colored edge shows how close each deadline is: red when overdue, orange within 24 hours, yellow within 3 days. Edit, complete, delete, and restore tasks, one at a time or many at once. A delete asks first, because it also removes the calendar event. |
 | Reports | One line for each day: "Sent", "Sent late", or "Report skipped". Click a day to see its report. |
 | Logs | The last 200 lines of the log. The log contains no message text. |
 | Settings | Your names, the words that mark tasks, the chats to ignore, the report time, and the retention times. A change applies at once. |
@@ -273,11 +280,34 @@ An export has no data for @mentions or replies. The script finds mentions from t
 
 </details>
 
+### Tasks that need a review
+
+When the bot is not sure about a task, it still puts the task in your calendar, so that you get the reminder. The event title starts with "?", and the dashboard shows a "Needs review" warning with the reason:
+
+| Reason | Example |
+|---|---|
+| Unclear who must do it | "Someone book the lab" in a group |
+| Low confidence | The model is less sure than the limit in Settings (0.6 by default) |
+| Date guessed by the model | "Submit it after the holidays", with no date that the date parser understands |
+
+Open the "Needs review" tab on the Tasks page. Click "Confirm" if the task is correct, or "Edit" to correct it. Both remove the warning and the "?" in the calendar. The Status page and the daily report show how many tasks need a review.
+
+### Known limitations
+
+1. The bot reads text, and the captions of images, videos, and documents. It does not read voice notes, images without a caption, stickers, polls, or locations.
+2. The bot reads only messages that arrive while it is linked. It does not read the old messages in your chats.
+3. A computer that is off or asleep does not read messages. When it is on again, WhatsApp sends the messages of the time that it was off, and the bot reads them then.
+4. The language model can make mistakes: a wrong person, a wrong date, or a task that is not a task. Check the "Needs review" tab.
+5. Baileys is an unofficial WhatsApp client. WhatsApp can block accounts that use it. Read the warning in "What you must have".
+
 <details>
 <summary><b>Problems and solutions</b></summary>
 
 | Problem | Solution |
 |---|---|
+| A task has "?" in the calendar | The bot was not sure about it. Confirm or edit it in the "Needs review" tab. |
+| The database is damaged ("database disk image is malformed" in the log) | Stop the bot. Rename the `bot.db` file in the data folder, and start the bot again. It makes a new database. You must link WhatsApp again, and the old tasks are not in the new database. |
+| You removed the Google key or the App Password | Open "Setup", and upload a new key or paste a new App Password. Then make a test event or send a test email. |
 | Windows shows "Windows protected your PC" | The installer has no code signature. Click "More info" and then "Run anyway". |
 | The loading screen says "The bot did not start" | Read the log in `%LOCALAPPDATA%\WhatsApp Task Bot\logs`, and report the problem on GitHub. |
 | The dashboard says "Access link needed" | Open the app from the Start menu. A copy from the source code: use the desktop shortcut, or do `npm run dashboard-url`. |

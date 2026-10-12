@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { loadConfig } from '../src/config.js';
 import { compileMatcher, classify } from '../src/filter.js';
 import { createBatcher } from '../src/batcher.js';
-import { parseOutput, systemPrompt } from '../src/extractor.js';
+import { parseOutput, systemPrompt, TAGS } from '../src/extractor.js';
 import { openStore, reportDay } from '../src/store.js';
 
 const config = { ...loadConfig(), myName: 'Alexander Morgan', aliases: ['Alexander', 'Alex'] };
@@ -192,9 +192,12 @@ test('batcher: assignee rules, dates, flags, one task per message', async () => 
   assert.equal(t[3].due_kind, 'datetime');
   assert.match(t[3].due, /^2026-10-12T17:00$/);
   assert.equal(t[4].assignee, 'me', 'alias normalized to me');
-  assert.equal(t[4].title, 'Bring chairs; Call caterer ?');
+  assert.equal(t[4].title, 'Bring chairs; Call caterer', 'no "?" in the title any more');
   assert.equal(t[4].due, '2026-10-13');
   assert.equal(t[4].flagged, 1, 'merged confidence 0.5 < 0.6');
+  assert.match(t[4].review_reason, /Low confidence \(50%\)/);
+  assert.match(t[4].review_reason, /Date guessed by the model/);
+  assert.ok(TAGS.includes(t[4].tag), 'a tag from the title words when the model gives none');
   assert.equal(t[5].assignee, 'unclear');
   assert.equal(t[5].flagged, 1);
   assert.equal(t[5].due, null);

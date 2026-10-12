@@ -36,20 +36,21 @@ const chats = { team: ['team@g.us', 'Product Team'], club: ['club@g.us', 'Design
 let n = 0;
 const task = (chat, title, assignee, due, kind, extra = {}) => {
   const [chat_id, chat_name] = chats[chat];
-  store.s.insertTask.run({ message_id: `demo-${++n}`, chat_id, chat_name, sender_name: chat_name, title, assignee, due, due_kind: kind, confidence: extra.confidence ?? 0.92, flagged: extra.flagged ?? 0, day: extra.day ?? day(0), created_at: now - (20 - n) * H });
+  store.s.insertTask.run({ message_id: `demo-${++n}`, chat_id, chat_name, sender_name: chat_name, title, assignee, due, due_kind: kind, confidence: extra.confidence ?? 0.92, flagged: extra.why ? 1 : 0, review_reason: extra.why ?? null, tag: extra.tag, day: extra.day ?? day(0), created_at: now - (20 - n) * H });
   if (extra.event) store.s.setEventId.run(`event${n}`, `demo-${n}`);
   if (extra.status) store.s.setTaskStatus.run({ id: n, status: extra.status, now });
   store.s.clearDirty.run(n);
 };
-task('team', 'Send the Q3 slides to Priya', 'me', iso(at(0, 17, 30)), 'datetime', { event: 1 });
+task('team', 'Send the Q3 slides to Priya', 'me', iso(new Date(now + 2.5 * H)), 'datetime', { event: 1, tag: 'assignment' });
 task('maya', 'Return the camera lens', 'me', iso(at(1, 0), false), 'date', { event: 1 });
 task('club', 'Submit the poster draft', 'everyone', iso(at(2, 12)), 'datetime', { event: 1 });
 task('team', 'Review the onboarding checklist', 'me', iso(at(-1, 0), false), 'date', { event: 1, day: day(-1) });
 task('hostel', 'Pay the mess fee', 'everyone', iso(at(4, 0), false), 'date', { event: 1 });
 task('family', 'Book train tickets for Diwali', 'me', null, null);
 task('team', 'Update the API docs', 'Leo', iso(at(3, 0), false), 'date');
-task('club', 'Bring the projector', 'unclear', iso(at(1, 0), false), 'date', { flagged: 1, confidence: 0.55, event: 1 });
-task('maya', 'Call the landlord ?', 'me', iso(at(2, 0), false), 'date', { event: 1, confidence: 0.7 });
+task('club', 'Bring the projector', 'unclear', iso(at(1, 0), false), 'date', { why: 'Unclear who must do it; Low confidence (55%)', confidence: 0.55, event: 1 });
+task('maya', 'Call the landlord', 'me', iso(at(2, 0), false), 'date', { event: 1, confidence: 0.7, why: 'Date guessed by the model' });
+task('team', 'Prepare for the design review', 'me', iso(at(6, 11)), 'datetime', { event: 1, tag: 'meeting' });
 task('hostel', 'Clean the common room', 'Sam', null, null, { day: day(-1) });
 task('team', 'Share the meeting notes', 'me', iso(at(-1, 18)), 'datetime', { event: 1, status: 'done', day: day(-1) });
 task('club', 'Order the club T-shirts', 'everyone', iso(at(-2, 0), false), 'date', { status: 'done', day: day(-2) });

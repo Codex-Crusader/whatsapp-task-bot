@@ -54,8 +54,9 @@ test('report: content, order, statuses, escaping, short chats, merge call', asyn
   assert.match(html, /In calendar/);
   assert.match(html, /No date/);
   assert.match(html, /Not yours/);
-  const check = html.slice(html.indexOf('Check these'));
+  const check = html.slice(html.indexOf('Needs review ('));
   assert.match(check, /Unclear task/);
+  assert.match(check, /Unclear who must do it/, 'the reason is shown');
   assert.doesNotMatch(check, /Ravi task/);
 
   assert.ok(store.s.getReport.get(DAY).html === html, 'saved once in SQLite');

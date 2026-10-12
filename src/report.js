@@ -66,6 +66,10 @@ export function createReporter({ store, config, extractor, nameOf, log }) {
       const who = t.assignee === 'me' ? 'Me' : t.assignee === 'everyone' ? 'Everyone' : t.assignee === 'unclear' ? 'Unclear' : t.assignee;
       return `<tr><td style="${td};${b}">${esc(t.title)}</td><td style="${td};${b}">${esc(who)}</td><td style="${td}">${esc(t.chat_name)}</td><td style="${td}">${esc(formatDue(t))}</td><td style="${td}">${esc(taskStatus(t))}</td></tr>`;
     };
+    const reviewRow = (t) => `<tr><td style="${td}">${esc(t.title)}</td><td style="${td}">${esc(t.chat_name)}</td><td style="${td}">${esc(t.review_reason || (t.assignee === 'unclear' ? 'Unclear who must do it' : 'Low confidence'))}</td></tr>`;
+    const reviewTable = check.length
+      ? `<table style="border-collapse:collapse;width:100%;font-size:14px"><tr><th style="${th}">Task</th><th style="${th}">Chat</th><th style="${th}">Why</th></tr>${check.map(reviewRow).join('')}</table><p style="color:#666;font-size:13px">These tasks are in your calendar with "?". Open the dashboard to confirm or edit them.</p>`
+      : '<p style="color:#666">None.</p>';
     const table = (list) => list.length
       ? `<table style="border-collapse:collapse;width:100%;font-size:14px"><tr><th style="${th}">Task</th><th style="${th}">Assigned to</th><th style="${th}">Chat</th><th style="${th}">Due</th><th style="${th}">Status</th></tr>${list.map(row).join('')}</table>`
       : '<p style="color:#666">None.</p>';
@@ -81,8 +85,8 @@ export function createReporter({ store, config, extractor, nameOf, log }) {
 ${convo}
 <h2 style="font-size:16px;margin:20px 0 8px">Tasks</h2>
 ${table(tasks)}
-<h2 style="font-size:16px;margin:20px 0 8px">Check these</h2>
-${table(check)}
+<h2 style="font-size:16px;margin:20px 0 8px">Needs review (${check.length})</h2>
+${reviewTable}
 </body></html>`;
   }
 

@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { initAuthCreds, BufferJSON, proto } from 'baileys';
+import { tagFor } from './extractor.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS messages (
@@ -42,7 +43,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   status TEXT NOT NULL DEFAULT 'open', -- open | done | deleted (deleted rows stay, so the task is never made again)
   event_dirty INTEGER NOT NULL DEFAULT 0, -- 1: the calendar event must be updated or removed
   event_gen INTEGER NOT NULL DEFAULT 0,   -- part of the event id; +1 after an event is removed
-  updated_at INTEGER
+  updated_at INTEGER,
+  tag TEXT,                    -- kind of task, from the model or from the title words
+  review_reason TEXT           -- why a flagged task needs a check; NULL after Confirm or Edit
 );
 CREATE UNIQUE INDEX IF NOT EXISTS tasks_message ON tasks(message_id);
 CREATE INDEX IF NOT EXISTS tasks_day ON tasks(day);
@@ -93,12 +96,25 @@ CREATE TABLE IF NOT EXISTS auth (
 ) WITHOUT ROWID;
 `;
 
-const TASK_FILTER = `(@s = 'all' AND status <> 'deleted' OR status = @s)
+// @s status tab ("review": open tasks with a warning), @f person, @d due date,
+// @tag, @chat exact, @q text search (a LIKE pattern: the caller puts ! before %, _ and !).
+const TASK_FILTER = `(@s = 'all' AND status <> 'deleted' OR @s = 'review' AND status = 'open' AND flagged = 1 OR status = @s)
   AND (@f = 'all' OR (@f = 'mine' AND assignee = 'me') OR (@f = 'everyone' AND assignee = 'everyone')
     OR (@f = 'others' AND assignee NOT IN ('me', 'everyone')))
   AND (@d = 'all' OR (@d = 'nodate' AND due IS NULL) OR (@d = 'overdue' AND substr(due, 1, 10) < @today)
     OR (@d = 'today' AND substr(due, 1, 10) = @today) OR (@d = 'week' AND substr(due, 1, 10) BETWEEN @today AND @week)
-    OR (@d = 'upcoming' AND substr(due, 1, 10) >= @today))`;
+    OR (@d = 'upcoming' AND substr(due, 1, 10) >= @today))
+  AND (@tag = '' OR tag = @tag)
+  AND (@chat = '' OR chat_name = @chat)
+  AND (@q = '' OR title LIKE @q ESCAPE '!' OR chat_name LIKE @q ESCAPE '!' OR sender_name LIKE @q ESCAPE '!')`;
+
+// Sort orders for the task list. Only these keys reach the SQL.
+export const TASK_SORTS = {
+  mine: "(assignee = 'me') DESC, due IS NULL, due, id DESC",
+  due: 'due IS NULL, due, id DESC',
+  newest: 'created_at DESC, id DESC',
+  chat: 'chat_name COLLATE NOCASE, due IS NULL, due, id DESC',
+};
 
 export function openStore(file) {
   mkdirSync(dirname(file), { recursive: true });
@@ -124,16 +140,24 @@ export function openStore(file) {
     lastMessageTs: q('SELECT MAX(ts) AS ts FROM messages'),
     taskTotals: q("SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE assignee = 'me') AS mine, MAX(created_at) AS lastAt FROM tasks WHERE status <> 'deleted'"),
 
-    insertTask: q(`INSERT INTO tasks (message_id, chat_id, chat_name, sender_name, title, assignee, due, due_kind, confidence, flagged, day, created_at)
-      VALUES (@message_id, @chat_id, @chat_name, @sender_name, @title, @assignee, @due, @due_kind, @confidence, @flagged, @day, @created_at)
+    insertTask: q(`INSERT INTO tasks (message_id, chat_id, chat_name, sender_name, title, assignee, due, due_kind, confidence, flagged, day, created_at, tag, review_reason)
+      VALUES (@message_id, @chat_id, @chat_name, @sender_name, @title, @assignee, @due, @due_kind, @confidence, @flagged, @day, @created_at, @tag, @review_reason)
       ON CONFLICT(message_id) DO NOTHING`),
     taskByMessage: q('SELECT * FROM tasks WHERE message_id = ?'),
     setEventId: q('UPDATE tasks SET event_id = ? WHERE message_id = ?'),
     tasksForDay: q("SELECT * FROM tasks WHERE day = ? AND status <> 'deleted' ORDER BY id"),
     // Dashboard edits. Each one marks the calendar event for an update.
     taskById: q('SELECT * FROM tasks WHERE id = ?'),
-    updateTask: q(`UPDATE tasks SET title = @title, assignee = @assignee, due = @due, due_kind = @due_kind,
-      flagged = 0, event_dirty = 1, updated_at = @now WHERE id = @id AND status <> 'deleted'`),
+    updateTask: q(`UPDATE tasks SET title = @title, assignee = @assignee, due = @due, due_kind = @due_kind, tag = coalesce(@tag, tag),
+      flagged = 0, review_reason = NULL, event_dirty = 1, updated_at = @now WHERE id = @id AND status <> 'deleted'`),
+    // Confirm a task with a warning: the "?" leaves the calendar event at the next sync.
+    confirmTask: q(`UPDATE tasks SET flagged = 0, review_reason = NULL, event_dirty = 1, updated_at = @now
+      WHERE id = @id AND flagged = 1 AND status <> 'deleted'`),
+    // The event text changed for all tasks (the original-message setting): rewrite every event.
+    markEventsDirty: q("UPDATE tasks SET event_dirty = 1 WHERE event_id IS NOT NULL AND status <> 'deleted'"),
+    reviewCount: q("SELECT COUNT(*) FROM tasks WHERE status = 'open' AND flagged = 1").pluck(),
+    tagCounts: q("SELECT tag, COUNT(*) AS n FROM tasks WHERE status <> 'deleted' AND tag IS NOT NULL GROUP BY tag"),
+    chatNames: q("SELECT chat_name, COUNT(*) AS n FROM tasks WHERE status <> 'deleted' AND chat_name IS NOT NULL GROUP BY chat_name ORDER BY chat_name COLLATE NOCASE LIMIT 300"),
     setTaskStatus: q('UPDATE tasks SET status = @status, event_dirty = 1, updated_at = @now WHERE id = @id AND status <> @status'),
     dirtyEvents: q('SELECT * FROM tasks WHERE event_dirty = 1 ORDER BY id'),
     clearDirty: q('UPDATE tasks SET event_dirty = 0 WHERE id = ?'),
@@ -141,8 +165,8 @@ export function openStore(file) {
     resetEvents: q('UPDATE tasks SET event_id = NULL, event_gen = 0, event_dirty = 0 WHERE event_id IS NOT NULL'),
     setEvent: q('UPDATE tasks SET event_id = @event_id, event_gen = @gen WHERE id = @id'),
     // Dashboard task list: filter by assignee group (@f) and due date (@d), 50 per page.
-    tasksPage: q(`SELECT * FROM tasks WHERE ${TASK_FILTER}
-      ORDER BY (assignee = 'me') DESC, due IS NULL, due, id DESC LIMIT 50 OFFSET @off`),
+    tasksPage: Object.fromEntries(Object.entries(TASK_SORTS).map(([k, order]) => [k, q(`SELECT * FROM tasks WHERE ${TASK_FILTER}
+      ORDER BY ${order} LIMIT 50 OFFSET @off`)])),
     tasksCount: q(`SELECT COUNT(*) FROM tasks WHERE ${TASK_FILTER}`).pluck(),
     // Tasks that need a calendar event: me, everyone or unclear, with a date.
     pendingEvents: q(`SELECT * FROM tasks WHERE event_id IS NULL AND due IS NOT NULL AND status = 'open'
@@ -196,6 +220,12 @@ export function openStore(file) {
     authDelete: q('DELETE FROM auth WHERE category = ? AND id = ?'),
   };
 
+  // Callers that do not know the newer fields still work: tag from the title words.
+  const rawInsertTask = s.insertTask;
+  s.insertTask = { run: (t) => rawInsertTask.run({ review_reason: null, ...t, tag: t.tag ?? tagFor(t.title) }) };
+  const rawUpdateTask = s.updateTask;
+  s.updateTask = { run: (t) => rawUpdateTask.run({ tag: null, ...t }) };
+
   const insertMessages = db.transaction((rows) => {
     let n = 0;
     for (const r of rows) n += s.insertMessage.run(r).changes;
@@ -219,6 +249,20 @@ function migrate(db) {
   if (!taskCols.includes('event_dirty')) db.exec('ALTER TABLE tasks ADD COLUMN event_dirty INTEGER NOT NULL DEFAULT 0');
   if (!taskCols.includes('event_gen')) db.exec('ALTER TABLE tasks ADD COLUMN event_gen INTEGER NOT NULL DEFAULT 0');
   if (!taskCols.includes('updated_at')) db.exec('ALTER TABLE tasks ADD COLUMN updated_at INTEGER');
+  if (!taskCols.includes('review_reason')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN review_reason TEXT');
+    // Before this column, a guessed date put " ?" after the title. Now it is a warning.
+    db.exec(`UPDATE tasks SET title = substr(title, 1, length(title) - 2), flagged = 1,
+      review_reason = coalesce(review_reason, 'Date guessed by the model'),
+      event_dirty = CASE WHEN event_id IS NOT NULL THEN 1 ELSE event_dirty END
+      WHERE title LIKE '% ?' AND status = 'open'`);
+  }
+  if (!taskCols.includes('tag')) db.exec('ALTER TABLE tasks ADD COLUMN tag TEXT');
+  const untagged = db.prepare('SELECT id, title FROM tasks WHERE tag IS NULL').all();
+  if (untagged.length) {
+    const set = db.prepare('UPDATE tasks SET tag = ? WHERE id = ?');
+    db.transaction(() => { for (const t of untagged) set.run(tagFor(t.title), t.id); })();
+  }
   // Masked names ("+91∙∙∙∙56") stored before the fix: use the phone number of the chat.
   db.exec(`UPDATE tasks SET chat_name = '+' || substr(chat_id, 1, instr(chat_id, '@') - 1)
     WHERE chat_name LIKE '%∙%' AND chat_id NOT LIKE '%@g.us'`);

@@ -34,7 +34,7 @@ const DEFAULTS = {
   skipThreshold: 5,
   emailTime: '21:00',
   confidenceThreshold: 0.6,
-  includeOriginalMessage: true,
+  includeOriginalMessage: false, // off by default: message text leaves the computer only when the user turns this on
   retention: { messageHours: 48, processedDays: 7, reportDays: 30 },
   dashboardPort: 4780,
   ollama: { url: 'http://127.0.0.1:11434', model: 'qwen2.5:7b', numCtx: 8192, numPredict: 1024 },

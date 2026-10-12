@@ -3,7 +3,7 @@ import * as chrono from 'chrono-node';
 import { isJidGroup } from 'baileys';
 import { LIMITS } from './config.js';
 import { compileMatcher, classify } from './filter.js';
-import { userPrompt, estimateTokens } from './extractor.js';
+import { userPrompt, estimateTokens, TAGS, tagFor } from './extractor.js';
 import { localDay, reportDay } from './store.js';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -189,17 +189,25 @@ export function createBatcher({ store, config, extractor, nameOf, meIds, status,
       const cls = part.classes[i];
       const assignee = resolveAssignee(cls, t.assignee);
       const due = resolveDue(t, row.ts);
+      // An uncertain task still goes to the calendar (with "?"), and the dashboard
+      // shows a "Needs review" warning with these reasons. User decision, 2026-10-12.
+      const reasons = [];
+      if (assignee === 'unclear') reasons.push('Unclear who must do it');
+      if (t.confidence < config.confidenceThreshold) reasons.push(`Low confidence (${Math.round(t.confidence * 100)}%)`);
+      if (due.guessed) reasons.push('Date guessed by the model');
       const task = {
         message_id: row.id,
         chat_id: row.chat_id,
         chat_name: nameOf(row.chat_id),
         sender_name: sender(row),
-        title: due.guessed ? `${t.title} ?` : t.title,
+        title: t.title,
         assignee,
         due: due.due,
         due_kind: due.kind,
         confidence: t.confidence,
-        flagged: assignee === 'unclear' || t.confidence < config.confidenceThreshold ? 1 : 0,
+        flagged: reasons.length ? 1 : 0,
+        review_reason: reasons.join('; ') || null,
+        tag: TAGS.includes(t.tag) ? t.tag : tagFor(t.title),
         day,
         created_at: now(),
       };

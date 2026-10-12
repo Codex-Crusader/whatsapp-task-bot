@@ -24,6 +24,7 @@ export function eventBody(task, { text, includeOriginal }) {
   const flagged = task.assignee === 'unclear' || task.flagged;
   const done = task.status === 'done';
   const lines = [`Chat: ${task.chat_name}`, `From: ${task.sender_name}`, `Assigned to: ${task.assignee}`];
+  if (flagged) lines.push(`Needs review: ${task.review_reason || (task.assignee === 'unclear' ? 'Unclear who must do it' : 'Low confidence')}`);
   if (includeOriginal && text) lines.push('', 'Message:', text);
   const body = {
     // A done task keeps its event, marked with a check, and gives no more reminders.
