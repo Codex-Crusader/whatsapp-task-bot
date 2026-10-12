@@ -94,6 +94,14 @@ test('release: Install Ollama runs once at a time and reports progress', async (
 test('release: a copy started by the launcher does not count as Start with Windows', async () => {
   assert.equal((await makeSetup({ isBackground: true }).state()).autostart.enabled, true, 'Task Scheduler copy');
   assert.equal((await makeSetup({ isBackground: true, launched: true }).state()).autostart.enabled, false, 'launcher copy');
+  // The launcher copy hands over to Task Scheduler, so the watchdog finds no copy that it does not own.
+  const exits = [];
+  const launchedCopy = makeSetup({ isBackground: true, launched: true, runAutostartScript: async () => {}, requestExit: () => exits.push('exit') });
+  assert.equal((await launchedCopy.act('autostart', {})).handover, true);
+  assert.deepEqual(exits, ['exit']);
+  const taskCopy = makeSetup({ isBackground: true, runAutostartScript: async () => {}, requestExit: () => exits.push('task exit') });
+  assert.equal((await taskCopy.act('autostart', {})).handover, false);
+  assert.deepEqual(exits, ['exit'], 'the Task Scheduler copy keeps running');
 });
 
 test('release: About page shows the version, the author, and issue links', async () => {

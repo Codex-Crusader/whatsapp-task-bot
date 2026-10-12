@@ -236,10 +236,12 @@ export function createSetup({ store, config = liveConfig, env = liveEnv, status,
     }
     store.kvSet('autostart', '1');
     log.info('setup: autostart registered');
-    // This copy runs in a console. The task starts the background copy within a
-    // minute, after this one stops and frees the port.
-    if (!isBackground) requestExit();
-    return { ok: true, handover: !isBackground };
+    // This copy runs in a console or was started by the launcher, so Task Scheduler
+    // does not own it. It stops and frees the port, and the task starts the
+    // background copy within a minute. Without this, the task tries every 5 minutes.
+    const handover = !isBackground || launched;
+    if (handover) requestExit();
+    return { ok: true, handover };
   }
 
   // Installs Ollama with winget (one fixed command, no input from the page).
@@ -513,7 +515,7 @@ root.addEventListener('click', async (e) => {
   busy(1);
   try {
     const r = await post(act, {});
-    if (act === 'autostart' && r.handover) { toast('Done. This window stops now, and the bot continues in the background within about a minute.'); setTimeout(() => location.reload(), 70000); }
+    if (act === 'autostart' && r.handover) { toast('Done. The bot restarts in the background. This page reloads in about a minute.'); setTimeout(() => location.reload(), 70000); }
     else toast({ 'calendar-test': 'The test event worked. Google Calendar is ready.', 'email-test': 'Test email sent. Look in your inbox.', 'ollama-pull': 'Download started.', 'ollama-install': 'Install started.', shortcut: 'Shortcut made.' }[act] || 'Done.');
     await load();
   } catch (err) { toast(err.message, true); b.disabled = false; } finally { busy(-1); }
