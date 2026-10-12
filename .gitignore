@@ -1,0 +1,12 @@
+node_modules/
+# Secrets and local data. Never commit these.
+.env
+keys/
+*.key.json
+service-account*.json
+data/
+logs/
+# Personal settings (made by the setup wizard from config.example.json)
+config.json
+# Shortcuts contain the dashboard access token
+*.url

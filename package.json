@@ -1,0 +1,28 @@
+{
+  "name": "whatsapp-task-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only WhatsApp task bot for Windows: finds tasks with a local LLM, puts them in Google Calendar, and emails a daily report.",
+  "type": "module",
+  "main": "src/main.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "setup": "node src/main.js",
+    "dashboard-url": "node src/dashboard-url.js",
+    "link": "node src/link.js",
+    "test": "node --test \"test/*.test.js\"",
+    "eval": "node eval/evaluate.js",
+    "demo": "node scripts/demo.js"
+  },
+  "dependencies": {
+    "baileys": "7.0.0-rc14",
+    "better-sqlite3": "^13.0.3",
+    "chrono-node": "^2.10.3",
+    "google-auth-library": "^11.2.0",
+    "nodemailer": "^10.1.0"
+  },
+  "license": "GPL-3.0-only"
+}
