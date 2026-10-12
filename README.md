@@ -50,16 +50,12 @@ The screenshots show the demo (`npm run demo`) with made-up data.
 ## How it works
 
 ```mermaid
-flowchart LR
-  WA["WhatsApp<br/>linked device, read-only"] --> IN["Ingest<br/>removes noise"]
-  IN --> DB[("SQLite<br/>on this computer")]
-  DB --> RF["Rule filter"]
-  RF --> BA["Batcher<br/>one call per chat"]
-  BA --> LM["Ollama<br/>qwen2.5:7b, local"]
-  LM --> TK["Tasks"]
+flowchart TD
+  WA["WhatsApp<br/>linked device, read-only"] --> DB[("Local database<br/>noise removed")]
+  DB --> LM["Local language model<br/>Ollama, one call per chat"]
+  LM --> TK["Tasks and summaries"]
   TK --> CAL["Google Calendar<br/>reminders on your phone"]
-  TK --> REP["Daily report"]
-  REP --> MAIL["Gmail"]
+  TK --> MAIL["Daily report<br/>by Gmail"]
   TK --> UI["Dashboard<br/>localhost only"]
 ```
 
