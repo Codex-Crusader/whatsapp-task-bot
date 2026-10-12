@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/Codex-Crusader/whatsapp-task-bot/blob/main/SECURITY.md
+    about: Do not report a security problem in a public issue. Read SECURITY.md first.

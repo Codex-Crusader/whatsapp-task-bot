@@ -1,0 +1,44 @@
+name: Report a problem
+description: Something does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. Do not paste message text, phone numbers, email addresses, keys, or passwords here. This page is public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, and what did you see?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to see the problem again
+      placeholder: |
+        1. Open ...
+        2. Click ...
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: On the About page of the dashboard.
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Windows and Node.js version
+      description: On the About page of the dashboard.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log lines (optional)
+      description: From the Logs page. The log has no message text, but read it before you paste it.
+      render: text

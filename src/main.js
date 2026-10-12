@@ -1,9 +1,10 @@
 // Entry point. One process: dashboard (with setup wizard), reader, ingest, and
 // the scheduler (batcher, calendar, report, mail). With no setup yet, only the
 // dashboard runs; the rest starts when WhatsApp is linked and a name is set.
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { config, env, DB_FILE, ROOT } from './config.js';
+import { config, env, DB_FILE, ROOT, INSTALLED } from './config.js';
 import { openStore, localDay } from './store.js';
 import { status, recordError } from './status.js';
 import { log } from './log.js';
@@ -19,7 +20,8 @@ import { createDashboard } from './dashboard.js';
 import { createSetup } from './setup.js';
 import { loadOrCreateToken, loginUrl, writeShortcut } from './access.js';
 
-const background = process.argv.includes('--background'); // started by Task Scheduler
+const background = process.argv.includes('--background'); // no console: Task Scheduler or the app launcher
+const launched = process.argv.includes('--from-launcher'); // started by the launcher, not by Task Scheduler
 const store = openStore(DB_FILE);
 const token = loadOrCreateToken();
 
@@ -76,14 +78,25 @@ function maybeStartScheduler() {
 // Setup button "Start with Windows". The only child process besides Ollama:
 // a fixed script with no input from the page, and only on Windows.
 const runAutostartScript = process.platform !== 'win32' ? null : () => new Promise((resolve, reject) => {
-  execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT, 'scripts', 'install-autostart.ps1')],
+  execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT, 'scripts', 'install-autostart.ps1'), '-Node', process.execPath],
     { windowsHide: true, timeout: 60_000 }, (err) => (err ? reject(err) : resolve()));
+});
+
+// Setup button "Install Ollama": winget with a fixed package ID, then start Ollama.
+const runOllamaInstall = process.platform !== 'win32' ? null : () => new Promise((resolve, reject) => {
+  execFile('winget.exe', ['install', '--id', 'Ollama.Ollama', '-e', '--silent', '--accept-source-agreements', '--accept-package-agreements'],
+    { windowsHide: true, timeout: 20 * 60_000 }, (err) => {
+      // winget gives a non-zero code when the newest version is already installed.
+      const app = join(process.env.LOCALAPPDATA || '', 'Programs', 'Ollama', 'ollama app.exe');
+      if (existsSync(app)) { spawn(app, [], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); return resolve(); }
+      reject(err || new Error('Ollama is not in the expected folder'));
+    });
 });
 
 const setup = createSetup({
   store, status, log, reader, calendar, mailer, port: config.dashboardPort, token,
   onProfileSaved: () => { maybeStartScheduler(); scheduler.refresh(); }, onLinked: maybeStartScheduler,
-  runAutostartScript, isBackground: background, requestExit: () => setTimeout(() => shutdown('handover to Task Scheduler'), 3000),
+  runAutostartScript, runOllamaInstall, isBackground: background, launched, requestExit: () => setTimeout(() => shutdown('handover to Task Scheduler'), 3000),
 });
 const dashboard = createDashboard({ store, config, status, log, dbFile: DB_FILE, pingOllama: extractor.ping, calendar, token, setup });
 
@@ -100,7 +113,8 @@ try {
 }
 
 // The desktop shortcut holds the access link. Never write the token to the log.
-if (!process.argv.includes('--no-shortcut')) {
+// An installed copy has its own Start menu and desktop icons (from the installer).
+if (!INSTALLED && !process.argv.includes('--no-shortcut')) {
   try { writeShortcut(config.dashboardPort, token); } catch (err) { log.warn('main: no desktop shortcut', { err: err.message }); }
 }
 if (!background) {

@@ -10,11 +10,19 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Codex-Crusader/whatsapp-task-bot/releases/latest"><img src="https://img.shields.io/github/v/release/Codex-Crusader/whatsapp-task-bot?color=0f766e&label=download" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-2f3640" alt="License: GPL-3.0"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-2f3640" alt="Platform: Windows 10 and 11">
-  <img src="https://img.shields.io/badge/node-24%2B-2f3640" alt="Node.js 24 or later">
   <img src="https://img.shields.io/badge/LLM-local%20(Ollama)-2f3640" alt="Local language model with Ollama">
   <img src="https://img.shields.io/badge/WhatsApp-read--only-2f3640" alt="WhatsApp access is read-only">
+</p>
+
+<p align="center">
+  <a href="https://github.com/Codex-Crusader/whatsapp-task-bot/releases/latest"><b>Download for Windows</b></a>
+  &nbsp;·&nbsp;
+  <a href="#install">How to install</a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/Codex-Crusader/whatsapp-task-bot/issues/new/choose">Report a problem</a>
 </p>
 
 <p align="center">
@@ -43,6 +51,10 @@ The screenshots show the demo (`npm run demo`) with made-up data.
     <td width="50%"><img src="docs/screenshots/reports.jpg" alt="Reports page"><br><sub><b>Reports.</b> Late and skipped reports are shown per day.</sub></td>
   </tr>
   <tr>
+    <td width="50%"><img src="docs/screenshots/welcome.jpg" alt="Welcome screen of the guided setup"><br><sub><b>Guided setup.</b> One step on each screen. You can skip any step.</sub></td>
+    <td width="50%"><img src="docs/screenshots/about.jpg" alt="About page"><br><sub><b>About.</b> Version, update check, and links to report a problem.</sub></td>
+  </tr>
+  <tr>
     <td colspan="2"><img src="docs/screenshots/report.jpg" alt="A daily report"><br><sub><b>Daily report.</b> The same page goes to your email.</sub></td>
   </tr>
 </table>
@@ -63,9 +75,47 @@ The bot stores each new message in a local database. Every 10 minutes, it sends 
 
 At the report time (21:00 by default), the bot does a last batch, makes the report, sends the email, and removes old data. If the computer is off at that time, the bot sends the report later, when the computer is on again.
 
-## Quick start
+## Install
 
-You do most of the setup on a web page that the bot shows.
+1. Download `WhatsApp-Task-Bot-Setup-<version>.exe` from the [latest release](https://github.com/Codex-Crusader/whatsapp-task-bot/releases/latest).
+2. Open the file. If Windows shows "Windows protected your PC", click "More info" and then "Run anyway".
+3. Click through the installer. It needs no administrator rights, and it brings everything that the bot needs except Ollama.
+4. The app opens in your browser with a guided setup.
+
+> [!NOTE]
+> The installer has no code signature, because a signature certificate costs money. For this reason, Windows SmartScreen shows a warning the first time. Each release has a `SHA256SUMS.txt` file. To make sure that your download is correct, compare it with the output of `Get-FileHash WhatsApp-Task-Bot-Setup-<version>.exe` in PowerShell.
+
+The guided setup shows one step on each screen. Each step shows "Complete" when it works. You can skip a step and finish it later on the Setup page.
+
+| Step | What you do |
+|---|---|
+| 1. Your name | Type the name that people use for you in WhatsApp. |
+| 2. Language model | Click "Install Ollama" if necessary, then click once to download the model (about 4.7 GB). |
+| 3. WhatsApp | Type your phone number, and type the code that the page shows on your phone. |
+| 4. Google Calendar | Follow the links, upload one key file, and paste one Calendar ID. A test event makes sure that it works. |
+| 5. Daily email | Paste a Gmail App Password. A test email makes sure that it works. |
+| 6. Start with Windows | Click once. After that, the bot operates in the background with no window. |
+
+After the setup, open the app from the Start menu or the desktop icon. If the bot does not operate, the app starts it and shows a loading screen until the dashboard is ready.
+
+### Update and remove
+
+To update, download the new installer and open it. The installer stops the bot, replaces the program files, and keeps your data. The About page in the dashboard tells you when a new version is available.
+
+To remove the app, use "Installed apps" in the Windows settings. The uninstaller stops the bot and removes it from Task Scheduler. Then it asks if it must also delete your personal data.
+
+The program files are in `%LOCALAPPDATA%\Programs\WhatsApp Task Bot`. Your personal data (the WhatsApp link, the database, the settings, the keys, and the logs) is in `%LOCALAPPDATA%\WhatsApp Task Bot`.
+
+### Try the dashboard first
+
+To see the dashboard before you set anything up, start the demo from a copy of the source code. It uses made-up data in a temporary folder, and it does not connect to WhatsApp or Google:
+
+```
+npm run demo
+```
+
+<details>
+<summary><b>Run from the source code</b></summary>
 
 1. Install [Node.js 24](https://nodejs.org/) or later.
 2. Install [Ollama](https://ollama.com/download), and start it from the Start menu.
@@ -77,28 +127,11 @@ You do most of the setup on a web page that the bot shows.
    npm start
    ```
 
-5. Open the link that the bot shows in PowerShell. The setup page opens.
+5. Open the link that the bot shows in PowerShell. The guided setup opens.
 
-The setup page has six steps, and each step shows "Complete" when it works:
+A copy from the source code keeps all its data in the project folder. To build the installer, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and do `powershell -ExecutionPolicy Bypass -File scriptsuild-installer.ps1`. The installer goes to the `dist` folder.
 
-| Step | What you do |
-|---|---|
-| 1. Your name | Type the name that people use for you in WhatsApp. |
-| 2. Language model | Click once. The page downloads the model (about 4.7 GB). |
-| 3. WhatsApp | Type your phone number, and type the code that the page shows on your phone. |
-| 4. Google Calendar | Follow the links, upload one key file, and paste one Calendar ID. A test event makes sure that it works. |
-| 5. Daily email | Paste a Gmail App Password. A test email makes sure that it works. |
-| 6. Start with Windows | Click once. After that, the bot operates in the background with no window. |
-
-After the setup, use the "WhatsApp Task Bot" shortcut on your desktop to open the dashboard.
-
-### Try the dashboard first
-
-To see the dashboard before you set anything up, start the demo. It uses made-up data in a temporary folder, and it does not connect to WhatsApp or Google:
-
-```
-npm run demo
-```
+</details>
 
 ## What you must have
 
@@ -245,7 +278,9 @@ An export has no data for @mentions or replies. The script finds mentions from t
 
 | Problem | Solution |
 |---|---|
-| The dashboard says "Access link needed" | Use the desktop shortcut, or do `npm run dashboard-url`. |
+| Windows shows "Windows protected your PC" | The installer has no code signature. Click "More info" and then "Run anyway". |
+| The loading screen says "The bot did not start" | Read the log in `%LOCALAPPDATA%\WhatsApp Task Bot\logs`, and report the problem on GitHub. |
+| The dashboard says "Access link needed" | Open the app from the Start menu. A copy from the source code: use the desktop shortcut, or do `npm run dashboard-url`. |
 | "WhatsApp" is red and shows "logged out" | Your phone removed the linked device. Open "Setup" and link WhatsApp again. Your tasks stay. |
 | "Language model" is red | Start Ollama from the Start menu. The next batch uses it. |
 | The calendar stays empty | Make sure that you shared the calendar with the service account email. Only tasks with a date get an event. |
@@ -262,6 +297,7 @@ An export has no data for @mentions or replies. The script finds mentions from t
 | File | Purpose |
 |---|---|
 | `src/main.js` | Starts the dashboard, the WhatsApp reader, and the scheduler |
+| `src/launcher.js` | The app in the Start menu: shows a loading screen, starts the bot, opens the dashboard |
 | `src/link.js` | Links WhatsApp from the command line (`npm run link`) |
 | `src/dashboard-url.js` | Shows the access link, or makes a new token (`npm run dashboard-url`) |
 | `src/setup.js` | Setup page and Settings page |
@@ -283,11 +319,18 @@ An export has no data for @mentions or replies. The script finds mentions from t
 | `src/config.js` | Reads and saves `config.json` and `.env` |
 | `src/log.js` | Log file with rotation (5 MB, 3 files) |
 | `scripts/demo.js` | Demo dashboard with made-up data |
+| `scripts/build-installer.ps1` | Builds the installer with Inno Setup and a checked copy of Node.js |
+| `installer/whatsapp-task-bot.iss` | Installer script |
+| `.github/workflows/release.yml` | Builds the installer and publishes a release when a version tag is pushed |
 | `eval/evaluate.js` | Evaluation script |
 
 `config.example.json` shows all settings. The bot makes `config.json` when you save the setup or the settings.
 
 </details>
+
+## Report a problem
+
+Open the About page in the dashboard and click "Report a problem" or "Request a feature". The form on GitHub then has your app version. You can also [open an issue](https://github.com/Codex-Crusader/whatsapp-task-bot/issues/new/choose) directly. Do not put message text, phone numbers, email addresses, or keys in an issue, because issues are public. For a security problem, read [SECURITY.md](SECURITY.md) first.
 
 ## License
 

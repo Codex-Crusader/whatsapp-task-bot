@@ -5,7 +5,8 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { DATA_DIR, ROOT, writeAtomic } from './config.js';
+import { DATA_DIR, ROOT, INSTALLED, writeAtomic } from './config.js';
+import { execFileSync } from 'node:child_process';
 
 const TOKEN_FILE = join(DATA_DIR, 'dashboard-token');
 export const COOKIE = 'wtb_session';
@@ -46,12 +47,18 @@ export function desktopDir() {
   return null;
 }
 
-export const SHORTCUT_NAME = 'WhatsApp Task Bot.url';
+// A developer copy: a web link with the access token. The installed app: a
+// shortcut to the launcher, which starts the bot when it does not operate.
+export const SHORTCUT_NAME = INSTALLED ? 'WhatsApp Task Bot.lnk' : 'WhatsApp Task Bot.url';
 
 // Desktop shortcut that opens the dashboard and logs in. Written only when it changed.
 export function writeShortcut(port, token, dir = desktopDir()) {
   if (!dir) return null;
   const file = join(dir, SHORTCUT_NAME);
+  if (INSTALLED) {
+    execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(ROOT, 'scripts', 'make-shortcut.ps1'), '-Path', file], { windowsHide: true, timeout: 30_000 });
+    return file;
+  }
   const text = `[InternetShortcut]\r\nURL=${loginUrl(port, token)}\r\nIconFile=${join(ROOT, 'assets', 'icon.ico')}\r\nIconIndex=0\r\n`;
   if (!existsSync(file) || readFileSync(file, 'utf8') !== text) writeFileSync(file, text);
   return file;

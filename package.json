@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-task-bot",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Read-only WhatsApp task bot for Windows: finds tasks with a local LLM, puts them in Google Calendar, and emails a daily report.",
   "type": "module",
@@ -24,5 +24,14 @@
     "google-auth-library": "^11.2.0",
     "nodemailer": "^10.1.0"
   },
-  "license": "GPL-3.0-only"
+  "license": "GPL-3.0-only",
+  "author": "Bhargavaram Krishnapur",
+  "homepage": "https://github.com/Codex-Crusader/whatsapp-task-bot",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Codex-Crusader/whatsapp-task-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Codex-Crusader/whatsapp-task-bot/issues"
+  }
 }

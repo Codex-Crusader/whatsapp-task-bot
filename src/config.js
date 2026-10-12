@@ -3,15 +3,26 @@
 // needs them, so a saved change applies without a restart (except the port).
 import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+// ROOT: the program files. HOME: the personal files (settings, secrets, data, logs).
+// A developer copy keeps both in the project folder. An installed copy (the
+// installer writes the file ".installed") keeps HOME in the user's AppData, so an
+// update replaces the program and never touches the personal files.
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-export const DATA_DIR = join(ROOT, 'data');
-export const LOG_DIR = join(ROOT, 'logs');
+export const INSTALLED = existsSync(join(ROOT, '.installed'));
+export const HOME = process.env.WTB_HOME
+  || (INSTALLED ? join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'WhatsApp Task Bot') : ROOT);
+export const DATA_DIR = join(HOME, 'data');
+export const LOG_DIR = join(HOME, 'logs');
 export const DB_FILE = join(DATA_DIR, 'bot.db');
-export const CONFIG_FILE = join(ROOT, 'config.json');
-export const ENV_FILE = join(ROOT, '.env');
-export const KEY_FILE = join(ROOT, 'keys', 'service-account.json');
+export const CONFIG_FILE = join(HOME, 'config.json');
+export const ENV_FILE = join(HOME, '.env');
+export const KEY_FILE = join(HOME, 'keys', 'service-account.json');
+export const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
+export const REPO_URL = 'https://github.com/Codex-Crusader/whatsapp-task-bot';
+export const AUTHOR = 'Bhargavaram Krishnapur';
 
 const DEFAULTS = {
   myName: '',

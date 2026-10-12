@@ -1,11 +1,15 @@
 # Registers the bot in Task Scheduler: start at log on, no console window.
-# Run: powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1 [-StartNow]
-param([switch]$StartNow)
+# Run: powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1 [-StartNow] [-Node <path to node.exe>]
+param([switch]$StartNow, [string]$Node)
 $ErrorActionPreference = 'Stop'
 
 $TaskName = 'WhatsApp Task Bot'
 $Root = Split-Path $PSScriptRoot -Parent
-$Node = (Get-Command node.exe).Source
+# The installed app brings its own node.exe. A developer copy uses the one on PATH.
+if (-not $Node) {
+  $Bundled = Join-Path $Root 'node\node.exe'
+  $Node = if (Test-Path $Bundled) { $Bundled } else { (Get-Command node.exe).Source }
+}
 $User = "$env:USERDOMAIN\$env:USERNAME"
 
 # conhost --headless runs node with no window. No VBScript (removed from new Windows 11 builds).
@@ -24,7 +28,7 @@ $Settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) 
   -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal `
-  -Settings $Settings -Description 'Read-only WhatsApp task bot. Dashboard: http://localhost:4780/' -Force | Out-Null
+  -Settings $Settings -Description 'Read-only WhatsApp task bot.' -Force | Out-Null
 Write-Host "Registered task '$TaskName'. It starts at your next log on."
 
 if ($StartNow) {

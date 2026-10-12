@@ -1,0 +1,49 @@
+name: Release
+
+# Push a tag such as v1.0.1 (the same version as package.json) to publish the installer.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 24.13.0
+
+      - name: Tag and package.json have the same version
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ("v$v" -ne $env:GITHUB_REF_NAME) { throw "Tag $env:GITHUB_REF_NAME does not match package.json version $v" }
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+
+      - name: Build the installer
+        shell: pwsh
+        run: ./scripts/build-installer.ps1
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = $env:GITHUB_REF_NAME.TrimStart('v')
+          $exe = "dist/WhatsApp-Task-Bot-Setup-$v.exe"
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  WhatsApp-Task-Bot-Setup-$v.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
+          gh release view $env:GITHUB_REF_NAME 2>$null
+          if ($LASTEXITCODE -ne 0) { gh release create $env:GITHUB_REF_NAME --title "WhatsApp Task Bot $v" --generate-notes }
+          gh release upload $env:GITHUB_REF_NAME $exe dist/SHA256SUMS.txt --clobber

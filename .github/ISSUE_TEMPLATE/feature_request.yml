@@ -1,0 +1,19 @@
+name: Request a feature
+description: An idea that makes the app better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What do you want the app to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is this useful for you?
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: On the About page of the dashboard.

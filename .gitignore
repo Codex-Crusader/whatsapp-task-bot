@@ -10,3 +10,5 @@ logs/
 config.json
 # Shortcuts contain the dashboard access token
 *.url
+build/
+dist/

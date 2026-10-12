@@ -9,9 +9,10 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const httpError = (code, message) => Object.assign(new Error(message), { code });
 const LINK_COOLDOWN_MS = 60 * 1000; // WhatsApp limits pairing code requests
 
-export function createSetup({ store, config = liveConfig, env = liveEnv, status, log, reader, calendar, mailer, port, token, onProfileSaved = () => {}, onLinked = () => {}, runAutostartScript = null, isBackground = false, requestExit = () => {}, fetchFn = fetch, paths = {}, shortcutDir = undefined }) {
+export function createSetup({ store, config = liveConfig, env = liveEnv, status, log, reader, calendar, mailer, port, token, onProfileSaved = () => {}, onLinked = () => {}, runAutostartScript = null, runOllamaInstall = null, isBackground = false, launched = false, requestExit = () => {}, fetchFn = fetch, paths = {}, shortcutDir = undefined }) {
   const files = { config: CONFIG_FILE, env: ENV_FILE, key: KEY_FILE, ...paths }; // tests use a temporary folder
   const pull = { running: false, status: '', completed: 0, total: 0, error: null };
+  const install = { running: false, done: false, error: null, available: !!runOllamaInstall };
   let linkError = null;
   let lastLinkAt = 0;
 
@@ -21,9 +22,9 @@ export function createSetup({ store, config = liveConfig, env = liveEnv, status,
       const r = await fetchFn(`${config.ollama.url}/api/tags`, { signal: AbortSignal.timeout(2000) });
       const names = (await r.json()).models?.map((m) => m.name) ?? [];
       const m = config.ollama.model;
-      return { reachable: true, hasModel: names.some((n) => n === m || n === `${m}:latest`), model: m, pull };
+      return { reachable: true, hasModel: names.some((n) => n === m || n === `${m}:latest`), model: m, pull, install };
     } catch {
-      return { reachable: false, hasModel: false, model: config.ollama.model, pull };
+      return { reachable: false, hasModel: false, model: config.ollama.model, pull, install };
     }
   }
 
@@ -50,10 +51,11 @@ export function createSetup({ store, config = liveConfig, env = liveEnv, status,
       whatsapp: { linked, state: status.whatsapp.state, pairing: reader.isPairing(), code: status.whatsapp.pairingCode ?? null, error: linkError, waitSec: Math.max(0, Math.ceil((lastLinkAt + LINK_COOLDOWN_MS - Date.now()) / 1000)) },
       google: { serviceEmail: keyEmail(), calendarId: env.calendarId || '', tested: calendarWorks() },
       gmail: { user: env.gmailUser || '', passwordSet: !!env.gmailAppPassword, tested: emailWorks() },
-      autostart: { enabled: store.kvGet('autostart') === '1' || isBackground, background: isBackground },
+      autostart: { enabled: store.kvGet('autostart') === '1' || (isBackground && !launched), background: isBackground },
       shortcut: { exists: !!desktopDir() && existsSync(`${desktopDir()}/${SHORTCUT_NAME}`) },
     };
     s.ready = s.profile.done && linked && ollama.hasModel;
+    s.onboarding = store.kvGet('onboarding') || ''; // '', 'done' or 'skipped'
     return s;
   }
 
@@ -240,13 +242,37 @@ export function createSetup({ store, config = liveConfig, env = liveEnv, status,
     return { ok: true, handover: !isBackground };
   }
 
+  // Installs Ollama with winget (one fixed command, no input from the page).
+  function ollamaInstall() {
+    if (!runOllamaInstall) throw httpError(400, 'Automatic install is not available. Install Ollama from ollama.com/download.');
+    if (install.running) return { ok: true };
+    Object.assign(install, { running: true, error: null });
+    log.info('setup: Ollama install started');
+    runOllamaInstall()
+      .then(() => { install.done = true; log.info('setup: Ollama installed'); })
+      .catch((err) => {
+        install.error = /ENOENT/.test(err.code ?? err.message) ? 'winget is not on this computer. Install Ollama from ollama.com/download.' : 'The install did not finish. Install Ollama from ollama.com/download.';
+        log.error('setup: Ollama install failed', { err: String(err.message).slice(0, 200) });
+      })
+      .finally(() => { install.running = false; });
+    return { ok: true };
+  }
+
+  // The guided setup: finished, or skipped by the person.
+  function onboarding(b) {
+    if (b.state !== 'done' && b.state !== 'skipped') throw httpError(400, 'Unknown state');
+    store.kvSet('onboarding', b.state);
+    log.info('setup: guided setup', { state: b.state });
+    return { ok: true };
+  }
+
   function shortcut() {
     const file = writeShortcut(port, token, shortcutDir);
     if (!file) throw httpError(400, 'No desktop folder was found.');
     return { ok: true };
   }
 
-  const ACTIONS = { profile: saveProfile, settings: saveSettings, 'ollama-pull': pullModel, link, 'google-key': googleKey, 'calendar-id': calendarId, 'calendar-test': calendarTest, gmail, 'email-test': emailTest, autostart, shortcut };
+  const ACTIONS = { profile: saveProfile, settings: saveSettings, 'ollama-pull': pullModel, 'ollama-install': ollamaInstall, onboarding, link, 'google-key': googleKey, 'calendar-id': calendarId, 'calendar-test': calendarTest, gmail, 'email-test': emailTest, autostart, shortcut };
 
   async function act(name, body) {
     const f = ACTIONS[name];
@@ -254,12 +280,19 @@ export function createSetup({ store, config = liveConfig, env = liveEnv, status,
     return f(body ?? {});
   }
 
-  return { state, act, settingsBody: () => settingsBody(config), setupBody };
+  return { state, act, settingsBody: () => settingsBody(config), setupBody, journeyBody };
 }
 
 // ---- pages (filled in by /setup.js in the browser) ----
+const SKELETON = '<div class="panel skel-panel"><div class="skel w40"></div><div class="skel w70"></div><div class="skel w55"></div></div>';
+
 function setupBody() {
-  return '<div id="setup" class="steps"><div class="panel"><div class="empty">Loading...</div></div></div><div class="toast" id="toast" hidden></div>';
+  return `<div id="setup" class="steps" aria-busy="true">${SKELETON.repeat(3)}</div><div class="toast" id="toast" hidden></div>`;
+}
+
+// The guided setup has its own simple frame: one step on each screen.
+function journeyBody() {
+  return `<div id="journey" class="journey" aria-busy="true"><div class="j-card panel">${SKELETON}</div></div><div class="toast" id="toast" hidden></div>`;
 }
 
 function settingsBody(c) {
@@ -306,52 +339,56 @@ if (form) {
   return;
 }
 
-const root = $('setup');
+const root = $('setup') || $('journey');
 if (!root) return;
+const journey = root.id === 'journey';
 let s = null;
 const badge = (done, optional) => done ? '<span class="badge ok">Complete</span>' : optional ? '<span class="badge">Optional</span>' : '<span class="badge warn">Required</span>';
 const CHECK = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"/></svg>';
-const opened = new Set(); // steps that the person opened or closed by hand stay that way
-const step = (n, title, done, body, optional, summary) => {
-  const id = 'step' + n;
-  const open = opened.has(id) ? opened.has(id + ':open') : !done;
-  return '<details class="step' + (done ? ' done' : '') + '" id="' + id + '"' + (open ? ' open' : '') + '><summary><span class="sn">' + (done ? CHECK : n) + '</span><span class="st-title">' + title + '</span>' + (summary ? '<span class="st-sum">' + summary + '</span>' : '') + '<span class="st-right">' + badge(done, optional) + '</span></summary><div class="step-b">' + body + '</div></details>';
-};
 const FAIL_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>';
+const SPIN = '<span class="spin" aria-hidden="true"></span>';
 const ext = (href, text) => '<a href="' + href + '" target="_blank" rel="noopener noreferrer">' + text + '</a> &#8599;';
 const copy = (text) => '<span class="copy"><code>' + esc(text) + '</code><button type="button" class="btn sm" data-copy="' + esc(text) + '">Copy</button></span>';
+const opened = new Set(); // steps that the person opened or closed by hand stay that way
 
-function render() {
-  const p = s.profile, o = s.ollama, w = s.whatsapp, g = s.google, m = s.gmail;
-  let html = s.ready ? '<div class="callout ok"><span>Setup complete. The bot reads WhatsApp and finds tasks.</span><a class="btn sm" href="/">Open Status</a></div>' : '';
-
-  html += step(1, 'Your name', p.done,
-    '<p class="sub">The bot uses your name to find messages for you.</p><form data-form="profile"><div class="row2"><div class="field"><label>Your name as it shows in WhatsApp</label><input name="myName" maxlength="80" value="' + esc(p.myName) + '" required></div><div class="field"><label>Daily report time</label><input name="emailTime" type="time" value="' + esc(p.emailTime) + '" required></div></div><div class="field"><label>Other names for you</label><input name="aliases" value="' + esc((p.aliases || []).join(', ')) + '" placeholder="For example: Alex, Al"><span class="hint">Put a comma between names.</span></div><button class="btn primary">Save</button></form>', false, p.done ? esc(p.myName) : '');
+// The six steps, built once, shown as a list (Setup) or one at a time (guided setup).
+function stepsData() {
+  const p = s.profile, o = s.ollama, w = s.whatsapp, g = s.google, m = s.gmail, a = s.autostart;
+  const out = [];
+  out.push({ title: 'Your name', intro: 'The bot uses your name to find the messages that are for you.', done: p.done, summary: p.done ? esc(p.myName) : '',
+    body: '<form data-form="profile"><div class="row2"><div class="field"><label>Your name as it shows in WhatsApp</label><input name="myName" maxlength="80" value="' + esc(p.myName) + '" required></div><div class="field"><label>Daily report time</label><input name="emailTime" type="time" value="' + esc(p.emailTime) + '" required></div></div><div class="field"><label>Other names for you</label><input name="aliases" value="' + esc((p.aliases || []).join(', ')) + '" placeholder="For example: Alex, Al"><span class="hint">Put a comma between names.</span></div><button class="btn primary">Save</button></form>' });
 
   let ob;
-  if (!o.reachable) ob = '<p>Ollama is not running. Ollama runs the language model on this computer, so your messages stay here.</p><ol><li>Install it: ' + ext('https://ollama.com/download', 'ollama.com/download') + ', or in PowerShell: ' + copy('winget install --id Ollama.Ollama -e') + '</li><li>Start Ollama from the Start menu.</li></ol><button class="btn" data-act="refresh">Check again</button>';
-  else if (!o.hasModel) {
+  if (!o.reachable) {
+    if (o.install.running) ob = '<p class="busy-line">' + SPIN + 'Installing Ollama. This can take a few minutes. Windows can ask for permission.</p>';
+    else if (o.install.done) ob = '<p class="busy-line">' + SPIN + 'Ollama is installed and starts now. This takes a few seconds.</p><button class="btn" data-act="refresh">Check again</button>';
+    else ob = '<p>Ollama runs the language model on this computer, so your messages stay here. It is not installed or not running.</p>'
+      + (o.install.error ? '<p class="bad-text">' + esc(o.install.error) + '</p>' : '')
+      + '<p>' + (o.install.available ? '<button class="btn primary" data-act="ollama-install">Install Ollama</button> ' : '') + '<button class="btn" data-act="refresh">Check again</button></p>'
+      + (o.install.available ? '<p class="hint">The button installs Ollama with winget and accepts the Ollama license for you.</p>' : '')
+      + '<p class="hint">Or install it yourself: ' + ext('https://ollama.com/download', 'ollama.com/download') + '. Then start Ollama from the Start menu.</p>';
+  } else if (!o.hasModel) {
     const pc = o.pull.total ? Math.floor(100 * o.pull.completed / o.pull.total) : 0;
-    ob = o.pull.running ? '<p>Downloading ' + esc(o.model) + ': ' + esc(o.pull.status) + '</p><div class="bar"><span style="width:' + pc + '%"></span></div><p class="sub">' + pc + '%. You can leave this page open.</p>'
+    ob = o.pull.running ? '<p class="busy-line">' + SPIN + 'Downloading ' + esc(o.model) + ': ' + esc(o.pull.status) + '</p><div class="bar"><span style="width:' + pc + '%"></span></div><p class="hint">' + pc + '%. You can leave this page open.</p>'
       : '<p>Ollama runs. The model ' + esc(o.model) + ' is not downloaded yet (about 4.7 GB).</p>' + (o.pull.error ? '<p class="bad-text">The download failed: ' + esc(o.pull.error) + '</p>' : '') + '<button class="btn primary" data-act="ollama-pull">Download the model</button>';
   } else ob = '<p>Ollama runs, and the model ' + esc(o.model) + ' is ready.</p>';
-  html += step(2, 'Language model', o.hasModel, ob, false, o.hasModel ? esc(o.model) + ' on Ollama' : '');
+  out.push({ title: 'Language model', intro: 'A language model reads your messages and finds the tasks, on this computer.', done: o.hasModel, summary: o.hasModel ? esc(o.model) + ' on Ollama' : '', body: ob });
 
   let wb;
   if (w.linked) wb = '<p>WhatsApp is linked. The bot only reads. It never sends a message.</p>';
-  else if (w.code) wb = '<p>On your phone: open WhatsApp, then <b>Linked devices</b>, <b>Link a device</b>, and <b>Link with phone number instead</b>. Type this code:</p><div class="code">' + esc(w.code) + '</div><p class="hint">Waiting for your phone. The code is valid for about 2 minutes.</p>';
-  else if (w.pairing) wb = '<p class="sub">Requesting a code from WhatsApp...</p>';
-  else wb = '<p>Link this bot to your WhatsApp as a linked device. The bot is not an official WhatsApp client. It only reads, but WhatsApp can block accounts that use unofficial clients.</p>' + (w.error ? '<p class="bad-text">' + esc(w.error) + '</p>' : '') + '<form data-form="link" class="inline"><div class="field"><label>Your phone number with the country code (digits only)</label><input name="phone" inputmode="numeric" maxlength="20" placeholder="919876543210" required></div><button class="btn primary"' + (w.waitSec ? ' disabled' : '') + '>Get pairing code' + (w.waitSec ? ' (' + w.waitSec + ' s)' : '') + '</button></form>';
-  html += step(3, 'WhatsApp', w.linked, wb, false, w.linked ? 'Linked, read-only' : '');
+  else if (w.code) wb = '<p>On your phone: open WhatsApp, then <b>Linked devices</b>, <b>Link a device</b>, and <b>Link with phone number instead</b>. Type this code:</p><div class="code">' + esc(w.code) + '</div><p class="hint busy-line">' + SPIN + 'Waiting for your phone. The code is valid for about 2 minutes.</p>';
+  else if (w.pairing) wb = '<p class="busy-line">' + SPIN + 'Requesting a code from WhatsApp...</p>';
+  else wb = '<p class="hint">The bot is not an official WhatsApp client. It only reads, but WhatsApp can block accounts that use unofficial clients.</p>' + (w.error ? '<p class="bad-text">' + esc(w.error) + '</p>' : '') + '<form data-form="link" class="inline"><div class="field"><label>Your phone number with the country code (digits only)</label><input name="phone" inputmode="numeric" maxlength="20" placeholder="919876543210" required></div><button class="btn primary"' + (w.waitSec ? ' disabled' : '') + '>Get pairing code' + (w.waitSec ? ' (' + w.waitSec + ' s)' : '') + '</button></form>';
+  out.push({ title: 'WhatsApp', intro: 'Link the bot to your WhatsApp as a linked device, the same way as WhatsApp Web.', done: w.linked, summary: w.linked ? 'Linked, read-only' : '', body: wb });
 
-  let gb = '<p class="sub">The bot writes your tasks to a calendar of its own, with a Google service account (a Google account for a program).</p>';
+  let gb = '';
   if (!g.serviceEmail) {
     gb += '<ol class="howto"><li>' + ext('https://console.cloud.google.com/projectcreate', 'Make a Google Cloud project') + ' (any name, for example "whatsapp-task-bot"). Wait until it is selected at the top.</li>'
       + '<li>' + ext('https://console.cloud.google.com/apis/library/calendar-json.googleapis.com', 'Enable the Google Calendar API') + '.</li>'
       + '<li>' + ext('https://console.cloud.google.com/iam-admin/serviceaccounts/create', 'Make a service account') + '. No role is necessary. Click "Done".</li>'
       + '<li>Open the new account, then "Keys", "Add key", "Create new key", "JSON". The browser downloads a key file.</li>'
       + '<li>Choose that file here: <input type="file" id="keyfile" accept=".json,application/json"></li></ol>'
-      + '<p class="sub">The key stays on this computer, in the keys folder. After the upload, delete the file from your Downloads folder.</p>';
+      + '<p class="hint">The key stays on this computer. After the upload, delete the file from your Downloads folder.</p>';
   } else {
     gb += '<p>Key loaded. Service account: ' + copy(g.serviceEmail) + '</p>'
       + '<ol class="howto"><li>' + ext('https://calendar.google.com/calendar/r/settings/createcalendar', 'Make a new calendar') + ' named "WhatsApp Tasks".</li>'
@@ -359,25 +396,77 @@ function render() {
       + '<li>Under "Event notifications", add reminders, for example 1 day, 1 hour, and 0 minutes before. A new calendar has none.</li>'
       + '<li>Under "Integrate calendar", copy the Calendar ID and paste it here:</li></ol>'
       + '<form data-form="calendar-id" class="inline"><div class="field"><label>Calendar ID</label><input name="calendarId" value="' + esc(g.calendarId) + '" placeholder="...@group.calendar.google.com" required></div><button class="btn">Save</button></form>'
-      + (g.calendarId ? '<p><button class="btn primary" data-act="calendar-test">Make a test event</button> <span class="sub">The bot makes one event for tomorrow and removes it at once.</span></p>' : '')
-      + '<p class="sub">Another key: <input type="file" id="keyfile" accept=".json,application/json"></p>';
+      + (g.calendarId ? '<p><button class="btn primary" data-act="calendar-test">Make a test event</button> <span class="hint">One event for tomorrow, removed at once.</span></p>' : '')
+      + '<p class="hint">Another key: <input type="file" id="keyfile" accept=".json,application/json"></p>';
   }
-  html += step(4, 'Google Calendar', g.tested, gb, !g.tested, g.tested ? 'Events go to your calendar' : '');
+  out.push({ title: 'Google Calendar', intro: 'Your tasks go to a calendar of their own, so your phone gives you reminders. The bot uses a Google service account (a Google account for a program).', done: g.tested, optional: !g.tested, summary: g.tested ? 'Events go to your calendar' : '', body: gb });
 
-  const mb = '<p class="sub">The daily report comes by email. Gmail needs an App Password (a 16-letter password for one program) and 2-Step Verification.</p>'
-    + '<ol class="howto"><li>' + ext('https://myaccount.google.com/apppasswords', 'Make an App Password') + ' with the name "whatsapp-task-bot".</li><li>Paste it here.</li></ol>'
+  const mb = '<ol class="howto"><li>' + ext('https://myaccount.google.com/apppasswords', 'Make an App Password') + ' with the name "whatsapp-task-bot". It needs 2-Step Verification.</li><li>Paste it here.</li></ol>'
     + '<form data-form="gmail"><div class="row2"><div class="field"><label>Gmail address</label><input name="gmailUser" type="email" value="' + esc(m.user) + '" required></div><div class="field"><label>App Password' + (m.passwordSet ? ' (saved; paste only to change it)' : '') + '</label><input name="gmailAppPassword" type="password" autocomplete="off" placeholder="xxxx xxxx xxxx xxxx"' + (m.passwordSet ? '' : ' required') + '></div></div><button class="btn">Save</button></form>'
     + (m.user && m.passwordSet ? '<p><button class="btn primary" data-act="email-test">Send a test email</button></p>' : '');
-  html += step(5, 'Daily email', m.tested, mb, !m.tested, m.tested ? esc(m.user) : '');
+  out.push({ title: 'Daily email', intro: 'Each evening the bot emails you a short report. Gmail needs an App Password (a 16-letter password for one program).', done: m.tested, optional: !m.tested, summary: m.tested ? esc(m.user) : '', body: mb });
 
-  const a = s.autostart;
-  const fb = '<p>' + (a.enabled ? 'The bot starts by itself when you log on to Windows, with no window.' : '<button class="btn primary" data-act="autostart">Start the bot with Windows</button> <span class="sub">Task Scheduler starts it at each log on and again within 5 minutes if it stops.</span>') + '</p>'
+  const fb = '<p>' + (a.enabled ? 'The bot starts by itself when you log on to Windows, with no window.' : '<button class="btn primary" data-act="autostart">Start the bot with Windows</button>') + '</p>'
     + '<p>' + (s.shortcut.exists ? 'The desktop has a "WhatsApp Task Bot" shortcut to this dashboard.' : '<button class="btn" data-act="shortcut">Put a shortcut on the desktop</button>') + '</p>';
-  html += step(6, 'Start with Windows', a.enabled, fb, !a.enabled, a.enabled ? 'Starts at log on' : '');
+  out.push({ title: 'Start with Windows', intro: 'The bot operates in the background, starts at each log on, and starts again by itself if it stops.', done: a.enabled, optional: !a.enabled, summary: a.enabled ? 'Starts at log on' : '', body: fb });
+  return out;
+}
+
+// ---- Setup page: all steps in a list ----
+function renderList() {
+  const steps = stepsData();
+  let html = s.ready ? '<div class="callout ok"><span>Setup complete. The bot reads WhatsApp and finds tasks.</span><a class="btn sm" href="/">Open Status</a></div>'
+    : '<div class="callout"><span>New here? The guided setup shows one step at a time.</span><a class="btn sm" href="/welcome">Start the guided setup</a></div>';
+  steps.forEach((st, i) => {
+    const id = 'step' + (i + 1);
+    const open = opened.has(id) ? opened.has(id + ':open') : !st.done;
+    html += '<details class="step' + (st.done ? ' done' : '') + '" id="' + id + '"' + (open ? ' open' : '') + '><summary><span class="sn">' + (st.done ? CHECK : i + 1) + '</span><span class="st-title">' + st.title + '</span>' + (st.summary ? '<span class="st-sum">' + st.summary + '</span>' : '') + '<span class="st-right">' + badge(st.done, st.optional) + '</span></summary><div class="step-b"><p class="sub">' + st.intro + '</p>' + st.body + '</div></details>';
+  });
   root.innerHTML = html;
 }
 
+// ---- guided setup: welcome, one step per screen, finish ----
+let at = Number(sessionStorage.getItem('journey-step') ?? -1);
+const skipped = new Set(JSON.parse(sessionStorage.getItem('journey-skipped') || '[]'));
+const go = (n) => { at = n; try { sessionStorage.setItem('journey-step', String(n)); sessionStorage.setItem('journey-skipped', JSON.stringify([...skipped])); } catch (e) {} renderJourney(); window.scrollTo(0, 0); };
+const LOGO_BIG = document.querySelector('.brand svg') ? document.querySelector('.brand svg').outerHTML.replace('width="22" height="22"', 'width="56" height="56"') : '';
+
+function renderJourney() {
+  const steps = stepsData();
+  const n = steps.length;
+  if (at < -1) at = -1;
+  if (at > n) at = n;
+  let html = '';
+  if (at === -1) {
+    html = '<div class="j-card panel j-hero">' + LOGO_BIG + '<h2>Welcome to WhatsApp Task Bot</h2><p class="sub">It finds the tasks in your WhatsApp chats, puts them in your calendar, and emails you a short report each evening. Let us set it up together. It takes about 15 minutes.</p>'
+      + '<div class="j-need"><div><b>Your phone</b><span>with WhatsApp</span></div><div><b>A Google account</b><span>with 2-Step Verification</span></div><div><b>About 6 GB</b><span>for the language model</span></div></div>'
+      + '<div class="j-actions"><button class="btn primary lg" data-j="next">Start the setup</button><button class="btn ghost" data-j="skip-all">Skip for now</button></div></div>';
+  } else if (at === n) {
+    const rows = steps.map((st, i) => '<li><span class="sn' + (st.done ? ' on' : '') + '">' + (st.done ? CHECK : i + 1) + '</span><span>' + st.title + '</span><span class="st-right">' + (st.done ? '<span class="badge ok">Complete</span>' : '<span class="badge">' + (skipped.has(i) ? 'Skipped' : 'Not done') + '</span>') + '</span></li>').join('');
+    const allReq = steps[0].done && steps[1].done && steps[2].done;
+    html = '<div class="j-card panel j-hero">' + LOGO_BIG + '<h2>' + (allReq ? 'You are all set' : 'Almost there') + '</h2><p class="sub">' + (allReq ? 'The bot reads WhatsApp and finds your tasks. You can change everything later on the Setup and Settings pages.' : 'The first three steps are necessary before the bot can find tasks. You can finish them later on the Setup page.') + '</p>'
+      + '<ul class="j-summary">' + rows + '</ul><div class="j-actions"><button class="btn primary lg" data-j="finish">Open the dashboard</button><button class="btn ghost" data-j="back">Back</button></div></div>';
+  } else {
+    const st = steps[at];
+    const pct = Math.round(100 * at / n);
+    html = '<div class="j-progress"><span>Step ' + (at + 1) + ' of ' + n + '</span><div class="bar"><span style="width:' + pct + '%"></span></div><button class="btn ghost sm" data-j="skip-all">Skip setup</button></div>'
+      + '<div class="j-card panel"><div class="j-head"><h2>' + st.title + '</h2>' + badge(st.done, st.optional) + '</div><p class="sub">' + st.intro + '</p>'
+      + (st.done ? '<div class="callout ok j-ok"><span>' + CHECK + ' This step is complete.</span></div>' : '') + '<div class="j-body">' + st.body + '</div></div>'
+      + '<div class="j-nav"><button class="btn ghost" data-j="back">Back</button><span class="grow"></span>'
+      + (st.done ? '<button class="btn primary lg" data-j="next">Continue</button>' : '<button class="btn" data-j="skip">Skip this step</button>') + '</div>';
+  }
+  root.innerHTML = html;
+  root.setAttribute('aria-busy', 'false');
+}
+
+const render = () => (journey ? renderJourney() : renderList());
+
+// Thin loading bar at the top while a request runs.
+let pending = 0;
+const busy = (d) => { pending = Math.max(0, pending + d); document.documentElement.classList.toggle('is-loading', pending > 0); };
+
 async function load() {
+  busy(1);
   try {
     const r = await fetch('/api/setup');
     if (r.status === 401) { location.reload(); return; }
@@ -385,11 +474,11 @@ async function load() {
     s = await r.json(); render();
   } catch (e) {
     s = null;
-    root.innerHTML = '<section class="panel"><div class="failure bad"><div class="fi">' + FAIL_ICON + '</div><h2>Connection to the bot lost</h2><p>The setup page cannot reach the bot. Make sure that it operates (the PowerShell window or the background task), and try again.</p><div class="acts"><button class="btn primary" data-act="refresh">Try again</button></div></div></section>';
-  }
-  const busy = s && (s.whatsapp.pairing || s.whatsapp.code || s.ollama.pull.running || s.whatsapp.waitSec);
+    root.innerHTML = '<section class="panel"><div class="failure bad"><div class="fi">' + FAIL_ICON + '</div><h2>Connection to the bot lost</h2><p>The page cannot reach the bot. Make sure that it operates, and try again.</p><div class="acts"><button class="btn primary" data-act="refresh">Try again</button></div></div></section>';
+  } finally { busy(-1); }
+  const active = s && (s.whatsapp.pairing || s.whatsapp.code || s.ollama.pull.running || s.ollama.install.running || (s.ollama.install.done && !s.ollama.reachable) || s.whatsapp.waitSec);
   clearTimeout(load.t);
-  load.t = setTimeout(() => { if (document.visibilityState === 'visible' && !document.activeElement?.closest('form')) load(); else load.t = setTimeout(load, 2000); }, busy ? 2500 : 15000);
+  load.t = setTimeout(() => { if (document.visibilityState === 'visible' && !document.activeElement?.closest('form')) load(); else load.t = setTimeout(load, 2000); }, active ? 2500 : 15000);
 }
 
 root.addEventListener('submit', async (e) => {
@@ -397,9 +486,23 @@ root.addEventListener('submit', async (e) => {
   if (!f) return;
   e.preventDefault();
   const body = Object.fromEntries(new FormData(f).entries());
-  try { await post(f.dataset.form, body); toast('Saved.'); document.activeElement?.blur(); await load(); } catch (err) { toast(err.message, true); }
+  busy(1);
+  try { await post(f.dataset.form, body); toast('Saved.'); document.activeElement?.blur(); await load(); } catch (err) { toast(err.message, true); } finally { busy(-1); }
 });
 root.addEventListener('click', async (e) => {
+  const j = e.target.closest('[data-j]');
+  if (j) {
+    const a = j.dataset.j;
+    if (a === 'next') return go(at + 1);
+    if (a === 'back') return go(at - 1);
+    if (a === 'skip') { skipped.add(at); return go(at + 1); }
+    if (a === 'skip-all' || a === 'finish') {
+      try { await post('onboarding', { state: a === 'finish' ? 'done' : 'skipped' }); } catch (err) {}
+      try { sessionStorage.removeItem('journey-step'); sessionStorage.removeItem('journey-skipped'); } catch (err2) {}
+      location.href = '/';
+      return;
+    }
+  }
   const c = e.target.closest('[data-copy]');
   if (c) { try { await navigator.clipboard.writeText(c.dataset.copy); toast('Copied.'); } catch (err) { toast('Select the text and copy it.', true); } return; }
   const b = e.target.closest('[data-act]');
@@ -407,12 +510,13 @@ root.addEventListener('click', async (e) => {
   const act = b.dataset.act;
   if (act === 'refresh') return load();
   b.disabled = true;
+  busy(1);
   try {
     const r = await post(act, {});
     if (act === 'autostart' && r.handover) { toast('Done. This window stops now, and the bot continues in the background within about a minute.'); setTimeout(() => location.reload(), 70000); }
-    else toast({ 'calendar-test': 'The test event worked. Google Calendar is ready.', 'email-test': 'Test email sent. Look in your inbox.', 'ollama-pull': 'Download started.', shortcut: 'Shortcut made.' }[act] || 'Done.');
+    else toast({ 'calendar-test': 'The test event worked. Google Calendar is ready.', 'email-test': 'Test email sent. Look in your inbox.', 'ollama-pull': 'Download started.', 'ollama-install': 'Install started.', shortcut: 'Shortcut made.' }[act] || 'Done.');
     await load();
-  } catch (err) { toast(err.message, true); b.disabled = false; }
+  } catch (err) { toast(err.message, true); b.disabled = false; } finally { busy(-1); }
 });
 // Only a click by the person counts. The browser also sends "toggle" for steps that the page opens.
 root.addEventListener('click', (e) => {
@@ -426,7 +530,7 @@ root.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (file.size > 10000) { toast('This file is too large for a key file.', true); return; }
   const rd = new FileReader();
-  rd.onload = async () => { try { await post('google-key', { text: rd.result }); toast('Key saved.'); await load(); } catch (err) { toast(err.message, true); } };
+  rd.onload = async () => { busy(1); try { await post('google-key', { text: rd.result }); toast('Key saved.'); await load(); } catch (err) { toast(err.message, true); } finally { busy(-1); } };
   rd.readAsText(file);
 });
 load();

@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { snapshot } from './status.js';
 import { localDay } from './store.js';
-import { ROOT } from './config.js';
+import { ROOT, HOME, VERSION, REPO_URL, AUTHOR } from './config.js';
+import { release } from 'node:os';
 import { CATCH_UP_DAYS } from './scheduler.js';
 import { SETUP_JS } from './setup.js';
 import { sameToken, cookieToken, sessionCookie } from './access.js';
@@ -57,7 +58,11 @@ a{color:var(--text);text-decoration:underline;text-decoration-color:var(--line2)
 .nav-sect{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:16px 8px 6px}
 .nav a{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;color:var(--muted);font-weight:500;text-decoration:none}
 .nav a:hover{background:var(--sunken);color:var(--text)}.nav a.on{background:var(--sunken);color:var(--text);font-weight:600}
-.side-foot{margin-top:auto;padding:12px 8px 0;border-top:1px solid var(--line);font-size:12.5px}
+.side-foot{margin-top:auto;padding:12px 8px 0;border-top:1px solid var(--line);font-size:12.5px;display:grid;gap:8px}
+.about-link{color:var(--faint);text-decoration:none;font-size:12px}.about-link:hover,.about-link.on{color:var(--text)}
+.about-hero{display:flex;align-items:center;gap:20px;padding:24px}.about-hero h2{margin:0;font-size:22px;font-weight:600}
+.about-hero .by{color:var(--muted);margin:4px 0 0}.about-acts{display:flex;flex-wrap:wrap;gap:8px;padding:0 24px 24px}
+.sysinfo{margin:0;padding:14px 16px;font:12px/1.7 "Cascadia Mono",Consolas,monospace;white-space:pre-wrap}
 .state{display:inline-flex;align-items:center;gap:8px;color:var(--text)}.state::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--faint)}
 .state.ok::before{background:var(--ok)}.state.bad::before{background:var(--bad)}
 .content{min-width:0;padding:28px 36px 64px;max-width:1200px;width:100%}
@@ -135,6 +140,29 @@ form.inline{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}form.inlin
 .failure.bad .fi{background:var(--bad-bg);color:var(--bad)}.failure.warn .fi{background:var(--warn-bg);color:var(--warn)}
 .failure h2{margin:0;font-size:16px;font-weight:600}.failure p{margin:0;max-width:460px;color:var(--muted)}.failure .acts{justify-content:center;margin-top:14px;gap:8px}
 .failure code{font-size:12px}
+.loadbar{position:fixed;top:0;left:0;right:0;height:2px;z-index:50;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .2s}
+.is-loading .loadbar{opacity:1}.loadbar::before{content:"";position:absolute;top:0;bottom:0;width:40%;background:var(--ink);animation:lb 1.1s ease-in-out infinite}
+@keyframes lb{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+.skel-panel{padding:18px 20px;display:grid;gap:12px;margin-bottom:10px}
+.skel{height:12px;border-radius:4px;background:linear-gradient(90deg,var(--sunken) 25%,var(--line) 37%,var(--sunken) 63%);background-size:400% 100%;animation:sk 1.4s ease infinite}
+.w40{width:40%}.w55{width:55%}.w70{width:70%}@keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.spin{display:inline-block;flex:none;width:14px;height:14px;margin-right:9px;border:2px solid var(--line2);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}.busy-line{display:flex;align-items:center}
+.j-top{display:flex;align-items:center;justify-content:space-between;max-width:780px;margin:0 auto;padding:20px 16px}
+.j-main{max-width:780px;margin:0 auto;padding:6px 16px 64px}.j-card{padding:28px 32px}
+.j-hero{display:grid;justify-items:center;gap:6px;text-align:center;padding:44px 32px}
+.j-hero h2{margin:12px 0 0;font-size:24px;font-weight:600;letter-spacing:-.01em}.j-hero>.sub{max-width:540px}
+.j-need{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:100%;margin:22px 0 4px}
+.j-need div{display:grid;gap:2px;padding:12px;border:1px solid var(--line);border-radius:8px}.j-need span{color:var(--muted);font-size:12.5px}
+.j-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:18px}.btn.lg{height:38px;padding:0 18px;font-size:14px}
+.j-progress{display:flex;align-items:center;gap:14px;margin-bottom:14px;color:var(--muted);font-size:12.5px}.j-progress .bar{flex:1;max-width:none}
+.j-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.j-head h2{margin:0;font-size:19px;font-weight:600}
+.j-body{margin-top:14px}.j-ok{margin:14px 0 0}.j-nav{display:flex;align-items:center;gap:8px;margin-top:14px}.j-nav .grow{flex:1}
+.j-summary{display:grid;gap:6px;width:100%;max-width:440px;margin:18px 0 0;padding:0;list-style:none;text-align:left}
+.j-summary li{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--line);border-radius:8px}
+.sn.on{background:var(--ink);border-color:var(--ink);color:var(--on-ink)}
+@media (max-width:640px){.j-need{grid-template-columns:1fr}.j-card{padding:22px 18px}}
+@media (prefers-reduced-motion:reduce){*,*::before{animation-duration:0s!important;transition:none!important}}
 .gate{max-width:520px;margin:14vh auto 0}.gate .panel-b{padding:24px 28px}.gate .brand{padding:0 0 14px}
 @media (max-width:900px){.app{grid-template-columns:1fr}.side{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 12px;border-right:0;border-bottom:1px solid var(--line)}
 .brand{padding:0 8px 0 0}.nav{display:flex;flex-wrap:wrap;gap:2px}.nav-sect{display:none}.side-foot{margin:0 0 0 auto;padding:0;border:0}
@@ -158,10 +186,13 @@ function overall(c,up,setupNeeded){const p=$('overall');if(!p)return;const bad=O
  if(bad){p.className='state bad';p.textContent=bad+(bad===1?' item needs':' items need')+' attention';return}
  if(setupNeeded){p.className='state';p.textContent='Setup not finished';return}
  p.className='state '+(up<180?'':'ok');p.textContent=up<180?'Starting':'All systems normal'}
+let pending=0;const busy=(d)=>{pending=Math.max(0,pending+d);document.documentElement.classList.toggle('is-loading',pending>0)};
 async function load(){
  const el=$('status');
+ busy(1);setTimeout(()=>busy(-1),400);
  try{const r=await fetch('/api/status');if(r.status===401){location.reload();return}if(!r.ok)throw new Error('HTTP '+r.status);const s=await r.json();lostSince=0;const c=s.checks;overall(c,s.uptimeSec,s.setupNeeded);if(!el)return;
  const sb=$('setup-banner');if(sb)sb.hidden=!s.setupNeeded;
+ const cn=$('connecting');if(cn)cn.hidden=!['connecting','reconnecting'].includes(s.whatsapp.state);el.setAttribute('aria-busy','false');
  const wa={open:'Connected',connecting:'Connecting',reconnecting:'Reconnecting','logged out':'Logged out','not linked':'Not linked','link failed':'Not linked',closed:'Stopped'}[s.whatsapp.state]||esc(s.whatsapp.state);
  const ollama=s.ollama.reachable===null?'Checking':s.ollama.reachable?'Reachable':(c.ollama==='idle'?'Starting':'Not reachable');
  el.innerHTML='<section class="panel summary">'+metric('WhatsApp',wa,'since '+when(s.whatsapp.since))+metric('Tasks found for you',(s.batch.mineFound||0),(s.batch.tasksFound||0)+' in total')+metric('Next check',s.batch.running?'Now':time(s.batch.nextAt),s.batch.running?'running':ago(s.batch.nextAt))+metric('Next report',time(s.email.nextAt),ago(s.email.nextAt))+'</section>'
@@ -179,6 +210,12 @@ async function load(){
 }
 document.addEventListener('click',(e)=>{if(e.target.closest('[data-retry]'))load()});
 const lg=document.querySelector('.log');if(lg)lg.scrollTop=lg.scrollHeight;
+const ci=document.querySelector('[data-copy-info]');if(ci)ci.addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('sysinfo').textContent);ci.textContent='Copied'}catch(e){}});
+const cu=$('check-update');if(cu)cu.addEventListener('click',async()=>{const out=$('update-result');cu.disabled=true;out.textContent='Checking...';
+ try{const j=await (await fetch('/api/update')).json();
+  if(!j.ok)out.textContent='Could not check: '+j.error+'.';else if(!j.latest)out.textContent='No release is published yet.';
+  else if(j.newer)out.innerHTML='Version '+esc(j.latest)+' is available. <a href="'+esc(j.url)+'" target="_blank" rel="noopener noreferrer">Download</a>';
+  else out.textContent='You have the latest version.'}catch(e){out.textContent='Could not check.'}cu.disabled=false});
 document.querySelectorAll('select[data-autosubmit]').forEach(x=>x.addEventListener('change',()=>x.form.submit()));
 const tbl=$('tasks-table');
 if(tbl){
@@ -187,7 +224,7 @@ if(tbl){
  const upd=()=>{const n=sel().length;$('bulk').hidden=!n;$('bulk-count').textContent=n+(n===1?' task selected':' tasks selected');const a=$('all');if(a)a.checked=n>0&&n===boxes().length};
  const toast=(m,bad)=>{const t=$('toast');t.textContent=m;t.className='toast'+(bad?' bad':'');t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>{t.hidden=true},4500)};
  try{const m=sessionStorage.getItem('flash');if(m){sessionStorage.removeItem('flash');toast(m)}}catch(e){}
- async function post(path,body){const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-bot-action':'1'},body:JSON.stringify(body)});let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw new Error(j.error||('Error '+r.status));return j}
+ async function post(path,body){busy(1);setTimeout(()=>busy(-1),600);const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-bot-action':'1'},body:JSON.stringify(body)});let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw new Error(j.error||('Error '+r.status));return j}
  const done=(m)=>{try{sessionStorage.setItem('flash',m)}catch(e){}location.reload()};
  const NAMES={done:'Marked as done',reopen:'Opened again',delete:'Deleted',restore:'Restored'};
  async function bulk(action,ids){if(!ids.length)return;try{const j=await post('/api/tasks/bulk',{action,ids});done(NAMES[action]+': '+j.changed+(j.changed===1?' task':' tasks'))}catch(e){toast(e.message,true)}}
@@ -247,12 +284,18 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
 
   // head: { title, sub, crumb, meta } shown above the body.
   const page = (title, active, body, script = '', head = {}) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} · WhatsApp Task Bot</title><link rel="icon" href="/favicon.ico"><style>${CSS}</style></head><body><div class="app">
+<title>${esc(title)} · WhatsApp Task Bot</title><link rel="icon" href="/favicon.ico"><style>${CSS}</style></head><body><div class="loadbar" aria-hidden="true"></div><div class="app">
 <aside class="side"><a class="brand" href="/">${LOGO}<span>WhatsApp Task Bot</span></a>
 <nav class="nav">${NAV.map(([sect, links]) => `<div class="nav-sect">${sect}</div>${links.map(([h, t]) => `<a href="${h}"${t === active ? ' class="on" aria-current="page"' : ''}>${ICONS[t]}<span>${t}</span></a>`).join('')}`).join('')}</nav>
-<div class="side-foot"><span id="overall" class="state">Checking</span></div></aside>
+<div class="side-foot"><span id="overall" class="state">Checking</span><a class="about-link${active === 'About' ? ' on' : ''}" href="/about">About · v${esc(VERSION)}</a></div></aside>
 <main class="content">${head.title ? `<header class="head"><div>${head.crumb ? `<div class="crumb">${head.crumb}</div>` : ''}<h1>${esc(head.title)}</h1>${head.sub ? `<p class="sub">${head.sub}</p>` : ''}</div>${head.meta ? `<div class="meta">${head.meta}</div>` : ''}</header>` : ''}${body}</main></div>
 <script src="/app.js"></script>${script ? `<script src="${script}"></script>` : ''}</body></html>`;
+
+  // The guided setup: a calm frame with no sidebar, one step on each screen.
+  const journeyPage = (body) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Welcome · WhatsApp Task Bot</title><link rel="icon" href="/favicon.ico"><style>${CSS}</style></head><body><div class="loadbar" aria-hidden="true"></div>
+<header class="j-top"><span class="brand">${LOGO}<span>WhatsApp Task Bot</span></span><a class="btn ghost sm" href="/">Open the dashboard</a></header>
+<main class="j-main">${body}</main><script src="/app.js"></script><script src="/setup.js"></script></body></html>`;
 
   // Shown without the token: no data, only how to get in.
   const gate = (title, text) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><link rel="icon" href="/favicon.ico"><style>${CSS}</style></head><body><div class="gate panel"><div class="panel-b"><div class="brand">${LOGO}<span>WhatsApp Task Bot</span></div><h1>${esc(title)}</h1>${text}</div></div></body></html>`;
@@ -304,7 +347,7 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
   }
 
   function statusPage() {
-    return page('Status', 'Status', '<div class="callout warn" id="setup-banner" hidden><span>The setup is not finished.</span><a class="btn sm" href="/setup">Continue setup</a></div><div id="status"><div class="empty">Loading...</div></div>', '',
+    return page('Status', 'Status', `<div class="callout warn" id="setup-banner" hidden><span>The setup is not finished.</span><a class="btn sm" href="/setup">Continue setup</a></div><div class="callout" id="connecting" hidden><span class="busy-line"><span class="spin"></span>Connecting to WhatsApp...</span></div><div id="status" aria-busy="true"><div class="panel summary">${'<div class="metric"><div class="skel w40"></div><div class="skel w70" style="margin-top:10px;height:18px"></div></div>'.repeat(4)}</div><div class="cols">${'<div class="panel skel-panel"><div class="skel w40"></div><div class="skel w70"></div><div class="skel w55"></div><div class="skel w70"></div></div>'.repeat(2)}</div></div>`, '',
       { title: 'Status', sub: 'Live health of the bot. The page updates every 30 seconds.', meta: '<span id="updated"></span>' });
   }
 
@@ -505,6 +548,45 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
     }
   }
 
+  // About: who made it, where to report problems, version and update check.
+  // A path without the Windows user name, for screenshots in public issues.
+  function shortPath(p) {
+    for (const [name, dir] of [['%LOCALAPPDATA%', process.env.LOCALAPPDATA], ['%USERPROFILE%', process.env.USERPROFILE]]) {
+      if (dir && p.toLowerCase().startsWith(dir.toLowerCase())) return name + p.slice(dir.length);
+    }
+    return p;
+  }
+  function sysInfo() {
+    return `App version: ${VERSION}\nWindows: ${release()}\nNode.js: ${process.version}`;
+  }
+  function aboutPage() {
+    const q = (o) => new URLSearchParams(o).toString();
+    const bug = `${REPO_URL}/issues/new?${q({ template: 'bug_report.yml', version: VERSION, system: `Windows ${release()}, Node.js ${process.version}` })}`;
+    const idea = `${REPO_URL}/issues/new?${q({ template: 'feature_request.yml', version: VERSION })}`;
+    const icon = LOGO.replace('width="22" height="22"', 'width="64" height="64"');
+    const body = `<section class="panel"><div class="about-hero">${icon}<div><h2>WhatsApp Task Bot</h2><p class="by">Version ${esc(VERSION)} · Made by <a href="https://github.com/Codex-Crusader" target="_blank" rel="noopener noreferrer">${esc(AUTHOR)}</a></p></div></div>
+<div class="about-acts"><a class="btn primary" href="${REPO_URL}" target="_blank" rel="noopener noreferrer">View on GitHub</a><a class="btn" href="${esc(bug)}" target="_blank" rel="noopener noreferrer">Report a problem</a><a class="btn" href="${esc(idea)}" target="_blank" rel="noopener noreferrer">Request a feature</a><button class="btn" id="check-update" type="button">Check for updates</button><span class="meta" id="update-result"></span></div></section>
+<div class="cols" style="margin-top:16px"><section class="panel"><div class="panel-h">Your data</div><div class="panel-b"><p class="sub" style="margin:0 0 8px">Message text stays on this computer. The language model operates here too. Only your tasks go to your own Google Calendar, and the daily report goes to your own Gmail address.</p><p class="sub" style="margin:0">Personal files: <code>${esc(shortPath(HOME))}</code></p><p style="margin:10px 0 0"><a href="${REPO_URL}/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">Security and privacy details</a></p></div></section>
+<section class="panel"><div class="panel-h">For a problem report<button class="btn sm" type="button" data-copy-info>Copy</button></div><pre class="sysinfo" id="sysinfo">${esc(sysInfo())}</pre></section></div>
+<p class="hint">Free software under the <a href="${REPO_URL}/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">GNU General Public License v3.0</a>. Problems and ideas go to the GitHub issue page. Do not put private data in an issue.</p>`;
+    return page('About', 'About', body, '', { title: 'About' });
+  }
+
+  // GitHub's latest release, only when the person asks. No background calls.
+  async function latestRelease() {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${REPO_URL.split('github.com/')[1]}/releases/latest`, { headers: { 'User-Agent': `whatsapp-task-bot/${VERSION}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(8000) });
+      if (r.status === 404) return { ok: true, latest: null };
+      if (!r.ok) return { ok: false, error: `GitHub answered ${r.status}` };
+      const j = await r.json();
+      const latest = String(j.tag_name || '').replace(/^v/, '');
+      const newer = latest.split('.').map(Number).reduce((acc, n, i) => acc ?? (n > (VERSION.split('.').map(Number)[i] ?? 0) ? true : n < (VERSION.split('.').map(Number)[i] ?? 0) ? false : null), null) === true;
+      return { ok: true, latest, newer, url: j.html_url };
+    } catch {
+      return { ok: false, error: 'GitHub could not be reached' };
+    }
+  }
+
   function logsPage() {
     const lines = log.tail(200).map((l) => {
       const m = /^(\S+ \S+) (INFO|WARN|ERROR) (.*)$/.exec(l);
@@ -525,7 +607,9 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
     if (p === '/login' && req.method === 'GET') {
       if (!sameToken(url.searchParams.get('t'), token)) return send(res, 403, html, gate('This link is not valid', GATE_TEXT));
       // The redirect removes the token from the address bar.
-      res.writeHead(302, { ...BASE_HEADERS, 'Set-Cookie': sessionCookie(token), Location: config.myName ? '/' : '/setup' });
+      const unlinked = ['not linked', 'link failed', 'logged out'].includes(status.whatsapp.state);
+      const firstRun = !store.kvGet('onboarding') && (!config.myName || unlinked);
+      res.writeHead(302, { ...BASE_HEADERS, 'Set-Cookie': sessionCookie(token), Location: firstRun ? '/welcome' : '/' });
       return res.end();
     }
     if (!sameToken(cookieToken(req), token)) {
@@ -540,6 +624,7 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
     try {
       if (p === '/') return send(res, 200, html, statusPage());
       if (p === '/setup.js') return send(res, 200, 'text/javascript; charset=utf-8', SETUP_JS);
+      if (p === '/welcome' && setup) return send(res, 200, html, journeyPage(setup.journeyBody()));
       if (p === '/setup' && setup) return send(res, 200, html, page('Setup', 'Setup', setup.setupBody(), '/setup.js', { title: 'Setup', sub: 'Do the steps in order. A step shows "Complete" when it works. You can come back at any time.' }));
       if (p === '/settings' && setup) return send(res, 200, html, page('Settings', 'Settings', setup.settingsBody(), '/setup.js', { title: 'Settings', sub: 'Changes apply at once. The bot does not need a restart.' }));
       if (p === '/api/setup' && setup) return send(res, 200, 'application/json', JSON.stringify(await setup.state()));
@@ -554,6 +639,8 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
       }
       if (p === '/tasks') return send(res, 200, html, tasksPage(url.searchParams));
       if (p === '/logs') return send(res, 200, html, logsPage());
+      if (p === '/about') return send(res, 200, html, aboutPage());
+      if (p === '/api/update') return send(res, 200, 'application/json', JSON.stringify(await latestRelease()));
       if (p.startsWith('/api/')) return send(res, 404, 'application/json', JSON.stringify({ error: 'Not found' }));
       return errorPage(res, 404);
     } catch (err) {
