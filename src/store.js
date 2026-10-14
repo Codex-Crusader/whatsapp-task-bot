@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS auth (
 // @tag, @chat exact, @q text search (a LIKE pattern: the caller puts ! before %, _ and !).
 const TASK_FILTER = `(@s = 'all' AND status <> 'deleted' OR @s = 'review' AND status = 'open' AND flagged = 1 OR status = @s)
   AND (@f = 'all' OR (@f = 'mine' AND assignee = 'me') OR (@f = 'everyone' AND assignee = 'everyone')
+    OR (@f = 'ours' AND assignee IN ('me', 'everyone', 'unclear'))
     OR (@f = 'others' AND assignee NOT IN ('me', 'everyone')))
   AND (@d = 'all' OR (@d = 'nodate' AND due IS NULL) OR (@d = 'overdue' AND substr(due, 1, 10) < @today)
     OR (@d = 'today' AND substr(due, 1, 10) = @today) OR (@d = 'week' AND substr(due, 1, 10) BETWEEN @today AND @week)
@@ -155,6 +156,11 @@ export function openStore(file) {
       WHERE id = @id AND flagged = 1 AND status <> 'deleted'`),
     // The event text changed for all tasks (the original-message setting): rewrite every event.
     markEventsDirty: q("UPDATE tasks SET event_dirty = 1 WHERE event_id IS NOT NULL AND status <> 'deleted'"),
+    // The count buttons above the task list: open tasks for me, the group, or unclear.
+    dueCounts: q(`SELECT COUNT(*) FILTER (WHERE substr(due, 1, 10) < @today) AS overdue,
+      COUNT(*) FILTER (WHERE substr(due, 1, 10) = @today) AS today,
+      COUNT(*) FILTER (WHERE substr(due, 1, 10) BETWEEN @today AND @week) AS week
+      FROM tasks WHERE status = 'open' AND due IS NOT NULL AND assignee IN ('me', 'everyone', 'unclear')`),
     reviewCount: q("SELECT COUNT(*) FROM tasks WHERE status = 'open' AND flagged = 1").pluck(),
     tagCounts: q("SELECT tag, COUNT(*) AS n FROM tasks WHERE status <> 'deleted' AND tag IS NOT NULL GROUP BY tag"),
     chatNames: q("SELECT chat_name, COUNT(*) AS n FROM tasks WHERE status <> 'deleted' AND chat_name IS NOT NULL GROUP BY chat_name ORDER BY chat_name COLLATE NOCASE LIMIT 300"),

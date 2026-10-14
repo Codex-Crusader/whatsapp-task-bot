@@ -17,7 +17,7 @@
   "skipThreshold": 5,
   "emailTime": "21:00",
   "confidenceThreshold": 0.6,
-  "includeOriginalMessage": true,
+  "includeOriginalMessage": false,
   "retention": {
     "messageHours": 48,
     "processedDays": 7,

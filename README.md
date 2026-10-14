@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/status.jpg" alt="The Status page of the dashboard" width="920">
+  <img src="docs/screenshots/tasks.jpg" alt="The Tasks page of the dashboard" width="920">
 </p>
 
 ## What it does
@@ -43,7 +43,7 @@ The screenshots show the demo (`npm run demo`) with made-up data.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/tasks.jpg" alt="Tasks page"><br><sub><b>Tasks.</b> Your open tasks first, with filters and bulk actions.</sub></td>
+    <td width="50%"><img src="docs/screenshots/status.jpg" alt="Status page"><br><sub><b>Status.</b> WhatsApp, the language model, the calendar, and the email at a glance.</sub></td>
     <td width="50%"><img src="docs/screenshots/edit-task.jpg" alt="Edit task window"><br><sub><b>Edit a task.</b> The change goes to Google Calendar at once.</sub></td>
   </tr>
   <tr>
@@ -170,11 +170,13 @@ The dashboard is a local web page. Only your computer can open it, and only with
 npm run dashboard-url
 ```
 
+The dashboard opens on your tasks. The sidebar has two groups: "Work" (Tasks and Reports) and "System" (Status, Logs, Settings, and Setup). The dot at the bottom of the sidebar shows the state of the bot. Click it to open the Status page.
+
 | Page | What it shows |
 |---|---|
-| Status | The WhatsApp connection, the batches, the language model, the calendar, the email, memory, and recent errors. Green operates, red is a problem, gray did not occur yet. |
-| Tasks | All tasks, with a tag for each (assignment, exam, payment, and more). Search, and filter by status, person, due date, tag, and chat. Sort by person, date, newest, or chat. A colored edge shows how close each deadline is: red when overdue, orange within 24 hours, yellow within 3 days. Edit, complete, delete, and restore tasks, one at a time or many at once. A delete asks first, because it also removes the calendar event. |
+| Tasks | All tasks, with a tag for each (assignment, exam, payment, and more). The buttons at the top count your overdue tasks, the tasks due today, the tasks of the next 7 days, and the tasks that need a review: click one to see those tasks. Search (press `/`), and filter by status, person, due date, tag, and chat. Sort by person, date, newest, or chat. A colored edge shows how close each deadline is: red when overdue, orange within 24 hours, yellow within 3 days. Edit, complete, delete, and restore tasks, one at a time or many at once. A delete asks first, because it also removes the calendar event. After a change, "Undo" reverses it. |
 | Reports | One line for each day: "Sent", "Sent late", or "Report skipped". Click a day to see its report. |
+| Status | The WhatsApp connection, the batches, the language model, the calendar, the email, memory, and recent errors. Green operates, red is a problem, gray did not occur yet. If something needs you, the Tasks page shows a short notice too. |
 | Logs | The last 200 lines of the log. The log contains no message text. |
 | Settings | Your names, the words that mark tasks, the chats to ignore, the report time, and the retention times. A change applies at once. |
 | Setup | The setup steps. Come back here to link WhatsApp again or to change the calendar or the email. |
@@ -312,7 +314,7 @@ Open the "Needs review" tab on the Tasks page. Click "Confirm" if the task is co
 | The loading screen says "The bot did not start" | Read the log in `%LOCALAPPDATA%\WhatsApp Task Bot\logs`, and report the problem on GitHub. |
 | The dashboard says "Access link needed" | Open the app from the Start menu. A copy from the source code: use the desktop shortcut, or do `npm run dashboard-url`. |
 | "WhatsApp" is red and shows "logged out" | Your phone removed the linked device. Open "Setup" and link WhatsApp again. Your tasks stay. |
-| "Language model" is red | Start Ollama from the Start menu. The next batch uses it. |
+| "Language model" is red | Start Ollama from the Start menu. The bot checks each minute and reads the waiting messages as soon as Ollama answers. An Ollama update causes the same short break. |
 | The calendar stays empty | Make sure that you shared the calendar with the service account email. Only tasks with a date get an event. |
 | A calendar event gives no reminder | Add reminders to the "WhatsApp Tasks" calendar (see "Google Calendar", step 8). |
 | The email does not arrive | Look in the spam folder. On the setup page, save a new App Password and send a test email. |

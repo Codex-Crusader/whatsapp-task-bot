@@ -425,7 +425,7 @@ function stepsData() {
 // ---- Setup page: all steps in a list ----
 function renderList() {
   const steps = stepsData();
-  let html = s.ready ? '<div class="callout ok"><span>Setup complete. The bot reads WhatsApp and finds tasks.</span><a class="btn sm" href="/">Open Status</a></div>'
+  let html = s.ready ? '<div class="callout ok"><span>Setup complete. The bot reads WhatsApp and finds tasks.</span><a class="btn sm" href="/">Open tasks</a></div>'
     : '<div class="callout"><span>New here? The guided setup shows one step at a time.</span><a class="btn sm" href="/welcome">Start the guided setup</a></div>';
   steps.forEach((st, i) => {
     const id = 'step' + (i + 1);

@@ -6,11 +6,11 @@ const SHORT_CHAT_MAX = 12; // a chat whose longest message is this short ("ok", 
 const MERGE_OVER = 5; // more summary lines than this -> one short LLM call
 
 const RANK = { me: 0, everyone: 1, unclear: 2 };
-const rank = (t) => RANK[t.assignee] ?? 3;
+const rank = (t) => (Object.hasOwn(RANK, t.assignee) ? RANK[t.assignee] : 3);
 
 export function taskStatus(t) {
   if (t.status === 'done') return 'Done';
-  if (!(t.assignee in RANK)) return 'Not yours';
+  if (!Object.hasOwn(RANK, t.assignee)) return 'Not yours';
   if (!t.due) return 'No date';
   return t.event_id ? 'In calendar' : 'Pending';
 }

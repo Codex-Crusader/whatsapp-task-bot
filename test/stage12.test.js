@@ -258,3 +258,54 @@ test('settings: turning the original message on or off rewrites the existing eve
   await setup.act('settings', { includeOriginalMessage: false });
   assert.equal(store.s.taskById.get(ids.r1).event_dirty, 1);
 });
+
+test('layout: the dashboard opens on the tasks; Status is under System', async () => {
+  const home = await get('/');
+  assert.equal(home.code, 200);
+  assert.match(home.body, /<title>Tasks · /);
+  assert.match(home.body, new RegExp(SECRET), 'the tasks show at once');
+  const status = await get('/status');
+  assert.match(status.body, /<title>Status · /);
+  const nav = /<nav class="nav">([\s\S]*?)<\/nav>/.exec(home.body)[1];
+  const order = [...nav.matchAll(/nav-sect">([^<]+)<|<span>([^<]+)<\/span>/g)].map((m) => m[1] || m[2]);
+  assert.deepEqual(order, ['Work', 'Tasks', 'Reports', 'System', 'Status', 'Logs', 'Settings', 'Setup']);
+  assert.match(home.body, /<a id="overall" class="state" href="\/status"/, 'the state dot opens Status');
+  assert.match(home.body, /id="sys-banner" hidden/);
+  assert.match(home.body, /id="new-tasks" hidden/);
+  assert.equal((await get('/tasks?q=chairs')).code, 200, 'old /tasks links still work');
+  assert.match((await get('/nope')).body, /href="\/">Open Tasks/);
+  assert.match(home.headers['permissions-policy'], /camera=\(\)/);
+});
+
+test('count buttons: each number matches the list it opens', async () => {
+  const home = (await get('/')).body;
+  const chips = [...home.matchAll(/<a class="chip[^"]*" href="([^"]+)"><b>(\d+)<\/b>([^<]+)<\/a>/g)];
+  assert.equal(chips.length, 4);
+  const rows = (html) => (html.match(/<tr class="(mine|task|done)"/g) || []).length;
+  for (const [, href, n, label] of chips) {
+    const list = (await get(href.replace(/&amp;/g, '&'))).body;
+    assert.equal(rows(list), Number(n), `${label}: ${href}`);
+  }
+  const ours = (await get('/?f=ours&s=all')).body;
+  assert.doesNotMatch(ours, /Karthik sends notes/, '"Mine and the group" leaves out other people');
+});
+
+test('log: a line break in a value cannot make a fake log line', () => {
+  const ldir = mkdtempSync(join(tmpdir(), 'wabot-log-'));
+  const l = createLogger({ dir: ldir, echo: false });
+  l.error('x: failed', { err: 'bad\n2026-01-01 00:00:00 INFO fake line', path: '/a\rb' + String.fromCharCode(0x2028) + 'c' });
+  const text = readFileSync(join(ldir, 'bot.log'), 'utf8');
+  assert.equal(text.split('\n').filter(Boolean).length, 1);
+  assert.ok(text.includes(String.raw`err=bad\u000a2026-01-01`), text);
+  assert.ok(text.includes(String.raw`path=/a\u000db\u2028c`), text);
+});
+
+test('page scripts: the browser code parses (a syntax error stops every button)', async () => {
+  const { SETUP_JS } = await import('../src/setup.js');
+  for (const [name, path] of [['app.js', '/app.js'], ['setup.js', '/setup.js']]) {
+    const r = await get(path);
+    assert.equal(r.code, 200, name);
+    assert.doesNotThrow(() => new Function(r.body), name);
+  }
+  assert.doesNotThrow(() => new Function(SETUP_JS));
+});

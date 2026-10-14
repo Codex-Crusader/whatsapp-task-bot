@@ -12,7 +12,7 @@ const EMAIL_RETRY_MS = 10 * MIN;
 const OLLAMA_RETRY_MS = 5 * MIN; // at logon Ollama can start after the bot
 export const CATCH_UP_DAYS = 7; // summaries are kept 7 days, so older days cannot be built
 
-export function createScheduler({ store, config, status, log, reader, flush, batcher, calendar, reporter, mailer, now = Date.now, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export function createScheduler({ store, config, status, log, reader, flush, batcher, calendar, reporter, mailer, pingOllama = null, now = Date.now, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   // Read at each use, so a change in the Settings page applies at once.
   const interval = () => config.batchIntervalMinutes * MIN;
   const emailHM = () => config.emailTime.split(':').map(Number);
@@ -69,8 +69,13 @@ export function createScheduler({ store, config, status, log, reader, flush, bat
     }
   }
 
+  // After a batch failed because Ollama was down: check Ollama each minute and
+  // run the batch as soon as it answers, not only after the 5-minute wait.
+  let waitingForOllama = false;
+
   async function batchJob() {
     let retrySoon = false;
+    waitingForOllama = false;
     try {
       flush();
       await batcher.run();
@@ -80,8 +85,7 @@ export function createScheduler({ store, config, status, log, reader, flush, bat
       retrySoon = /Ollama is not reachable|fetch failed|ECONNREFUSED/.test(err.message);
     }
     await syncCalendar();
-    if (retrySoon) status.batch.nextAt = now() + OLLAMA_RETRY_MS;
-    else planNext();
+    if (retrySoon) { status.batch.nextAt = now() + OLLAMA_RETRY_MS; waitingForOllama = !!pingOllama; } else planNext();
   }
 
   // Report and email for one day. Today: batch first (no skips). A past day:
@@ -153,6 +157,10 @@ export function createScheduler({ store, config, status, log, reader, flush, bat
   async function tick() {
     if (busy) return;
     if (pendingDay() && !emailBlocked()) return exclusive(catchUp);
+    if (waitingForOllama && status.batch.nextAt > now() && await pingOllama()) {
+      log.info('scheduler: Ollama answers again, batch now');
+      status.batch.nextAt = now();
+    }
     if (status.batch.nextAt && now() >= status.batch.nextAt) return exclusive(batchJob);
   }
 

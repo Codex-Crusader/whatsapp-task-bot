@@ -20,11 +20,15 @@ export function createLogger({ dir = LOG_DIR, name = 'bot', maxBytes = 5 * 1024 
     size = 0;
   }
 
+  // One entry is one line: a line break in a value (an error text, a path) must not
+  // make a second, fake log line. Control characters are written as \uXXXX.
+  const flat = (v) => String(v).replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`).slice(0, 2000);
+
   function write(level, msg, fields) {
-    let line = `${stamp()} ${level} ${msg}`;
+    let line = `${stamp()} ${level} ${flat(msg)}`;
     if (fields) {
       for (const [k, v] of Object.entries(fields)) {
-        if (v !== undefined) line += ` ${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`;
+        if (v !== undefined) line += ` ${flat(k)}=${flat(typeof v === 'string' ? v : JSON.stringify(v))}`;
       }
     }
     line += '\n';

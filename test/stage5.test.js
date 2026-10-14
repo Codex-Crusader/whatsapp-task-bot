@@ -153,6 +153,28 @@ test('scheduler: Ollama not reachable -> next batch in 5 minutes, not 30', async
   assert.equal(s.status.batch.nextAt, NOW + 5 * 60 * 1000);
 });
 
+test('scheduler: when Ollama answers again, the batch runs at the next tick, not after 5 minutes', async () => {
+  const s = schedSetup({ sentToday: true });
+  let up = false;
+  let runs = 0;
+  const sched = createScheduler({
+    store: s.store, config, status: s.status, log, now: () => NOW, sleep: async () => {},
+    reader: { isOfflineDone: () => true }, flush() {}, calendar: { sync: async () => {} },
+    batcher: { run: async () => { runs++; if (!up) throw new Error('Ollama is not reachable'); return { ok: true }; } },
+    reporter: {}, mailer: {}, pingOllama: async () => up,
+  });
+  await sched.batchJob();
+  assert.equal(runs, 1);
+  await sched.tick();
+  assert.equal(runs, 1, 'Ollama still down: wait');
+  up = true;
+  await sched.tick();
+  assert.equal(runs, 2, 'Ollama back: batch at once');
+  assert.ok(s.status.batch.nextAt > NOW + 5 * 60 * 1000, 'then the normal interval');
+  await sched.tick();
+  assert.equal(runs, 2, 'no extra batch after the retry');
+});
+
 test('scheduler: laptop off at report time -> late report when it is on again; empty day skipped', async () => {
   const morning = new Date(2026, 9, 12, 8, 0).getTime(); // 12 Oct 08:00, before today's email time
   const s = schedSetup({ at: morning, firstDay: '2026-10-10' });

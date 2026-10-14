@@ -23,6 +23,7 @@ const BASE_HEADERS = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Referrer-Policy': 'no-referrer',
   'Cache-Control': 'no-store',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), clipboard-read=()',
 };
 // Pages may run only /app.js and frame only our own report view.
 const CSP_PAGE = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src 'self'; frame-src 'self'; frame-ancestors 'none'";
@@ -42,7 +43,7 @@ const ICONS = {
   Settings: ICON('<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>'),
   Setup: ICON('<path d="M12 3v8"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/>'),
 };
-const NAV = [['Overview', [['/', 'Status']]], ['Work', [['/tasks', 'Tasks'], ['/reports', 'Reports']]], ['System', [['/logs', 'Logs'], ['/settings', 'Settings'], ['/setup', 'Setup']]]];
+const NAV = [['Work', [['/', 'Tasks'], ['/reports', 'Reports']]], ['System', [['/status', 'Status'], ['/logs', 'Logs'], ['/settings', 'Settings'], ['/setup', 'Setup']]]];
 
 const CSS = `
 :root{color-scheme:light;--bg:#f6f7f9;--panel:#fff;--sunken:#f1f2f5;--text:#14161a;--muted:#5f6573;--faint:#8b91a0;--line:#e4e6eb;--line2:#d4d7de;
@@ -65,7 +66,12 @@ a{color:var(--text);text-decoration:underline;text-decoration-color:var(--line2)
 .about-hero .by{color:var(--muted);margin:4px 0 0}.about-acts{display:flex;flex-wrap:wrap;gap:8px;padding:0 24px 24px}
 .sysinfo{margin:0;padding:14px 16px;font:12px/1.7 "Cascadia Mono",Consolas,monospace;white-space:pre-wrap}
 .state{display:inline-flex;align-items:center;gap:8px;color:var(--text)}.state::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--faint)}
-.state.ok::before{background:var(--ok)}.state.bad::before{background:var(--bad)}
+.state.ok::before{background:var(--ok)}.state.bad::before{background:var(--bad)}a.state{text-decoration:none}a.state:hover{text-decoration:underline;text-decoration-color:var(--line2)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.chip{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border:1px solid var(--line2);border-radius:6px;background:var(--panel);color:var(--muted);text-decoration:none;font-size:12.5px}
+.chip b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}.chip:hover{border-color:var(--muted);color:var(--text)}.chip.on{background:var(--sunken);color:var(--text);border-color:var(--muted)}
+.chip.bad b{color:var(--bad)}.chip.soon b{color:var(--soon)}.chip.warn b{color:var(--warn)}
+.toast .undo{margin-left:6px;background:transparent;border:1px solid rgba(127,127,127,.5);color:inherit;border-radius:5px;height:24px;padding:0 8px;font:inherit;cursor:pointer}
+kbd{font:11px "Cascadia Mono",Consolas,monospace;padding:1px 5px;border:1px solid var(--line2);border-radius:4px;color:var(--muted)}
 .content{min-width:0;padding:28px 36px 64px;max-width:1200px;width:100%}
 .head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
 .crumb{font-size:12.5px;color:var(--muted);margin-bottom:4px}.crumb a{color:var(--muted)}
@@ -194,10 +200,21 @@ function overall(c,up,setupNeeded){const p=$('overall');if(!p)return;const bad=O
  if(setupNeeded){p.className='state';p.textContent='Setup not finished';return}
  p.className='state '+(up<180?'':'ok');p.textContent=up<180?'Starting':'All systems normal'}
 let pending=0;const busy=(d)=>{pending=Math.max(0,pending+d);document.documentElement.classList.toggle('is-loading',pending>0)};
+// A short notice above the task list when something needs the person, and a
+// "new tasks" bar when a batch finds tasks while the page is open.
+let seenTasks=null;
+function notices(s){const nb=$('sys-banner');if(nb){const c=s.checks;let m='';
+  if(s.setupNeeded)m='The setup is not finished. The bot cannot find tasks yet.';
+  else if(c.whatsapp==='bad')m='WhatsApp is not connected. New messages wait until it connects again.';
+  else if(c.ollama==='bad')m='The language model is not reachable. New messages wait until it is back.';
+  else if(c.calendar==='bad')m='The last write to Google Calendar failed.';
+  else if(c.email==='bad')m='The last daily email failed. The bot tries again.';
+  nb.hidden=!m;if(m){$('sys-text').textContent=m;$('sys-link').href=s.setupNeeded?'/setup':'/status';$('sys-link').textContent=s.setupNeeded?'Continue setup':'Open Status'}}
+ const nt=$('new-tasks');if(nt){const n=s.batch.tasksFound||0;if(seenTasks===null)seenTasks=n;else if(n>seenTasks){$('new-count').textContent=(n-seenTasks)+(n-seenTasks===1?' new task':' new tasks')+' found.';nt.hidden=false}}}
 async function load(){
  const el=$('status');
- busy(1);setTimeout(()=>busy(-1),400);
- try{const r=await fetch('/api/status');if(r.status===401){location.reload();return}if(!r.ok)throw new Error('HTTP '+r.status);const s=await r.json();lostSince=0;const c=s.checks;overall(c,s.uptimeSec,s.setupNeeded);if(!el)return;
+ if(el){busy(1);setTimeout(()=>busy(-1),400)}
+ try{const r=await fetch('/api/status');if(r.status===401){location.reload();return}if(!r.ok)throw new Error('HTTP '+r.status);const s=await r.json();lostSince=0;const c=s.checks;overall(c,s.uptimeSec,s.setupNeeded);notices(s);if(!el)return;
  const sb=$('setup-banner');if(sb)sb.hidden=!s.setupNeeded;
  const cn=$('connecting');if(cn)cn.hidden=!['connecting','reconnecting'].includes(s.whatsapp.state);el.setAttribute('aria-busy','false');
  const wa={open:'Connected',connecting:'Connecting',reconnecting:'Reconnecting','logged out':'Logged out','not linked':'Not linked','link failed':'Not linked',closed:'Stopped'}[s.whatsapp.state]||esc(s.whatsapp.state);
@@ -221,7 +238,8 @@ const ci=document.querySelector('[data-copy-info]');if(ci)ci.addEventListener('c
 const cu=$('check-update');if(cu)cu.addEventListener('click',async()=>{const out=$('update-result');cu.disabled=true;out.textContent='Checking...';
  try{const j=await (await fetch('/api/update')).json();
   if(!j.ok)out.textContent='Could not check: '+j.error+'.';else if(!j.latest)out.textContent='No release is published yet.';
-  else if(j.newer)out.innerHTML='Version '+esc(j.latest)+' is available. <a href="'+esc(j.url)+'" target="_blank" rel="noopener noreferrer">Download</a>';
+  else if(j.newer&&String(j.url).startsWith('https://github.com/'))out.innerHTML='Version '+esc(j.latest)+' is available. <a href="'+esc(j.url)+'" target="_blank" rel="noopener noreferrer">Download</a>';
+  else if(j.newer)out.textContent='Version '+j.latest+' is available on GitHub.';
   else out.textContent='You have the latest version.'}catch(e){out.textContent='Could not check.'}cu.disabled=false});
 document.querySelectorAll('select[data-autosubmit]').forEach(x=>x.addEventListener('change',()=>x.form.submit()));
 // Deadline colors: red when overdue, orange within 24 hours, yellow within 3 days.
@@ -247,7 +265,17 @@ if(tbl){
  async function post(path,body){busy(1);setTimeout(()=>busy(-1),600);const r=await fetch(path,{method:'POST',headers:{'content-type':'application/json','x-bot-action':'1'},body:JSON.stringify(body)});let j={};try{j=await r.json()}catch(e){}if(!r.ok)throw new Error(j.error||('Error '+r.status));return j}
  const done=(m)=>{try{sessionStorage.setItem('flash',m)}catch(e){}location.reload()};
  const NAMES={done:'Marked as done',reopen:'Opened again',delete:'Deleted',restore:'Restored',confirm:'Confirmed'};
- async function bulk(action,ids){if(!ids.length)return;try{const j=await post('/api/tasks/bulk',{action,ids});done(NAMES[action]+': '+j.changed+(j.changed===1?' task':' tasks'))}catch(e){toast(e.message,true)}}
+ // Undo: the opposite action on the same tasks, offered once after the page reloads.
+ const UNDO={done:'reopen',reopen:'done',delete:'restore'}; // no undo for a restore: that would delete without the confirmation
+ async function bulk(action,ids,quiet){if(!ids.length)return;try{const j=await post('/api/tasks/bulk',{action,ids});
+  if(!quiet&&UNDO[action]&&j.changed){try{sessionStorage.setItem('undo',JSON.stringify({action:UNDO[action],ids}))}catch(e){}}
+  done(NAMES[action]+': '+j.changed+(j.changed===1?' task':' tasks'))}catch(e){toast(e.message,true)}}
+ try{const u=JSON.parse(sessionStorage.getItem('undo')||'null');sessionStorage.removeItem('undo');const t=$('toast');
+  if(u&&t&&!t.hidden){const b=document.createElement('button');b.className='undo';b.textContent='Undo';b.addEventListener('click',()=>bulk(u.action,u.ids,true));t.appendChild(b);clearTimeout(toast.t);toast.t=setTimeout(()=>{t.hidden=true},9000)}}catch(e){}
+ // "/" goes to the search box. Escape clears the selection.
+ document.addEventListener('keydown',(e)=>{const tag=(e.target.tagName||'').toLowerCase();
+  if(e.key==='/'&&!['input','textarea','select'].includes(tag)&&!document.querySelector('dialog[open]')){const q=document.querySelector('input[name=q]');if(q){e.preventDefault();q.focus();q.select()}}
+  if(e.key==='Escape'&&!document.querySelector('dialog[open]')&&sel().length){boxes().forEach(x=>{x.checked=false});upd()}});
  let pendingDelete=[];
  function askDelete(ids){if(!ids.length)return;pendingDelete=ids;$('confirm-text').textContent='Delete '+ids.length+(ids.length===1?' task':' tasks')+'? The calendar event is removed too. You can restore deleted tasks from the "Deleted" view.';$('confirm-dlg').showModal()}
  $('confirm-ok').addEventListener('click',()=>{$('confirm-dlg').close();bulk('delete',pendingDelete)});
@@ -307,7 +335,7 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
 <title>${esc(title)} · WhatsApp Task Bot</title><link rel="icon" href="/favicon.ico"><style>${CSS}</style></head><body><div class="loadbar" aria-hidden="true"></div><div class="app">
 <aside class="side"><a class="brand" href="/">${LOGO}<span>WhatsApp Task Bot</span></a>
 <nav class="nav">${NAV.map(([sect, links]) => `<div class="nav-sect">${sect}</div>${links.map(([h, t]) => `<a href="${h}"${t === active ? ' class="on" aria-current="page"' : ''}>${ICONS[t]}<span>${t}</span></a>`).join('')}`).join('')}</nav>
-<div class="side-foot"><span id="overall" class="state">Checking</span><a class="about-link${active === 'About' ? ' on' : ''}" href="/about">About · v${esc(VERSION)}</a></div></aside>
+<div class="side-foot"><a id="overall" class="state" href="/status" title="Open Status">Checking</a><a class="about-link${active === 'About' ? ' on' : ''}" href="/about">About · v${esc(VERSION)}</a></div></aside>
 <main class="content">${head.title ? `<header class="head"><div>${head.crumb ? `<div class="crumb">${head.crumb}</div>` : ''}<h1>${esc(head.title)}</h1>${head.sub ? `<p class="sub">${head.sub}</p>` : ''}</div>${head.meta ? `<div class="meta">${head.meta}</div>` : ''}</header>` : ''}${body}</main></div>
 <script src="/app.js"></script>${script ? `<script src="${script}"></script>` : ''}</body></html>`;
 
@@ -325,9 +353,9 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
   const FAIL_SVG = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/></svg>';
   const failureBody = (title, text, actions, tone = 'bad') => `<section class="panel"><div class="failure ${tone}"><div class="fi">${FAIL_SVG}</div><h2>${esc(title)}</h2><p>${text}</p><div class="acts">${actions}</div></div></section>`;
   const ERRORS = {
-    404: ['Page not found', 'This page does not exist. The link can be old or mistyped.', '<a class="btn primary" href="/">Go to Status</a><a class="btn" href="/tasks">Open Tasks</a>', 'warn'],
-    405: ['Not available', 'This page only shows data. Use the buttons on the page to make changes.', '<a class="btn primary" href="/">Go to Status</a>', 'warn'],
-    500: ['Something went wrong', 'The bot could not show this page. The error is in the log. The bot continues to operate.', '<a class="btn primary" href="/logs">Open logs</a><a class="btn" href="/">Go to Status</a>', 'bad'],
+    404: ['Page not found', 'This page does not exist. The link can be old or mistyped.', '<a class="btn primary" href="/">Open Tasks</a><a class="btn" href="/status">Open Status</a>', 'warn'],
+    405: ['Not available', 'This page only shows data. Use the buttons on the page to make changes.', '<a class="btn primary" href="/">Open Tasks</a>', 'warn'],
+    500: ['Something went wrong', 'The bot could not show this page. The error is in the log. The bot continues to operate.', '<a class="btn primary" href="/logs">Open logs</a><a class="btn" href="/status">Open Status</a>', 'bad'],
   };
   function errorPage(res, code, override = null) {
     const [title, text, actions, tone] = override ?? ERRORS[code];
@@ -418,7 +446,7 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
   }
 
   const STATUSES = { open: 'Open', review: 'Needs review', done: 'Done', deleted: 'Deleted', all: 'All' };
-  const FILTERS = { all: 'Everyone', mine: 'Mine', everyone: 'For the group', others: 'Others and unclear' };
+  const FILTERS = { all: 'Everyone', ours: 'Mine and the group', mine: 'Mine', everyone: 'For the group', others: 'Others and unclear' };
   const DUES = { all: 'Any date', overdue: 'Overdue', today: 'Today', week: 'Next 7 days', upcoming: 'Today and later', nodate: 'No date' };
   const SORTS = { mine: 'Mine first', due: 'Due date', newest: 'Newest', chat: 'Chat' };
   const own = (map, v) => (Object.hasOwn(map, v) ? v : null);
@@ -480,10 +508,19 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
       : '<button class="btn sm" data-act="bulk-confirm">Confirm</button><button class="btn sm" data-act="bulk-done">Mark as done</button><button class="btn sm" data-act="bulk-reopen">Reopen</button><button class="btn sm danger" data-act="bulk-delete">Delete</button>';
     const pager = `<div class="pager"><span>${first ? `${first}–${Math.min(total, pageNo * 50)} of ${total}` : '0 tasks'} · Page ${pageNo} of ${pages} (${total} tasks)</span><span class="filters"><a class="btn sm${pageNo > 1 ? '' : ' off'}" href="${esc(link({ page: pageNo - 1 }))}">Previous</a><a class="btn sm${pageNo < pages ? '' : ' off'}" href="${esc(link({ page: pageNo + 1 }))}">Next</a></span></div>`;
     const reviewN = store.s.reviewCount.get();
+    // Count buttons: one click to the tasks that matter now. Each count matches the list it opens.
+    const dc = store.s.dueCounts.get({ today, week });
+    const chip = (label, n, cls, o) => {
+      const on = Object.entries(o).every(([k, v]) => cur[k] === v) && !tag && !chat && !text;
+      return `<a class="chip ${n ? cls : ''}${on ? ' on' : ''}" href="${esc(link({ ...clear, s: 'open', f: 'all', due: 'all', ...o, page: '' }))}"><b>${n}</b>${label}</a>`;
+    };
+    const chips = `<nav class="chips" aria-label="Quick filters">${chip('overdue', dc.overdue, 'bad', { f: 'ours', due: 'overdue' })}${chip('due today', dc.today, 'soon', { f: 'ours', due: 'today' })}${chip('in the next 7 days', dc.week, 'warn', { f: 'ours', due: 'week' })}${chip('need review', reviewN, 'warn', { s: 'review' })}</nav>`;
+    const banners = `<div class="callout warn" id="sys-banner" hidden><span id="sys-text"></span><a class="btn sm" id="sys-link" href="/status">Open Status</a></div>`
+      + `<div class="callout" id="new-tasks" hidden><span id="new-count"></span><a class="btn sm" href="${esc(link({ page: '' }))}">Show them</a></div>`;
     const tabs = Object.entries(STATUSES).map(([k, v]) => `<a href="${esc(link({ s: k, page: '' }))}"${k === st ? ' class="on" aria-current="true"' : ''}>${v}${k === 'review' && reviewN ? ` (${reviewN})` : ''}</a>`).join('');
     const hidden = (k, v) => (v ? `<input type="hidden" name="${k}" value="${esc(v)}">` : '');
     const toolbar = `<div class="toolbar"><nav class="seg" aria-label="Task status">${tabs}</nav>`
-      + `<form class="filters" method="get" action="/tasks">${hidden('s', st)}<input class="in search" type="search" name="q" value="${esc(text)}" placeholder="Search tasks, chats, people" aria-label="Search">`
+      + `<form class="filters" method="get" action="/tasks">${hidden('s', st)}<input class="in search" type="search" name="q" value="${esc(text)}" placeholder="Search (press /)" aria-label="Search tasks, chats, and people">`
       + `${select('f', 'Person', opts(FILTERS, f))}${select('due', 'Due date', opts(DUES, d))}${select('tag', 'Tag', tagOpts)}${select('chat', 'Chat', chatOpts)}${select('sort', 'Sort', opts(SORTS, sort))}`
       + `${filtered ? `<a class="btn ghost sm" href="${esc(link({ ...clear, page: '' }))}">Clear filters</a>` : ''}<noscript><button class="btn sm">Apply</button></noscript></form></div>`;
     const tagSelect = TAGS.map((t) => `<option value="${t}">${cap(t)}</option>`).join('');
@@ -498,7 +535,7 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
 <div class="dlg-f"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn primary">Save changes</button></div></form></dialog>
 <dialog id="confirm-dlg"><div class="dlg-b"><h3>Delete tasks</h3><p id="confirm-text" class="sub"></p></div><div class="dlg-f"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn danger solid" id="confirm-ok">Delete</button></div></dialog>
 <div class="toast" id="toast" hidden></div>`;
-    return page('Tasks', 'Tasks', `${toolbar}<section class="panel">${table}${pager}</section>${dialogs}`, '',
+    return page('Tasks', 'Tasks', `${banners}${chips}${toolbar}<section class="panel">${table}${pager}</section>${dialogs}`, '',
       { title: 'Tasks', sub: 'Your open tasks come first. Changes go to Google Calendar at once. The colored edge shows how close a deadline is.' });
   }
 
@@ -626,7 +663,8 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
       if (r.status === 404) return { ok: true, latest: null };
       if (!r.ok) return { ok: false, error: `GitHub answered ${r.status}` };
       const j = await r.json();
-      const latest = String(j.tag_name || '').replace(/^v/, '');
+      const latest = String(j.tag_name || '').replace(/^v/, '').slice(0, 20);
+      if (!/^\d+\.\d+\.\d+$/.test(latest)) return { ok: false, error: 'GitHub gave an unknown version' };
       const newer = latest.split('.').map(Number).reduce((acc, n, i) => acc ?? (n > (VERSION.split('.').map(Number)[i] ?? 0) ? true : n < (VERSION.split('.').map(Number)[i] ?? 0) ? false : null), null) === true;
       return { ok: true, latest, newer, url: j.html_url };
     } catch {
@@ -669,7 +707,8 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
     if (req.method === 'POST' && sa && setup) return handleSetup(req, res, sa[1]);
     if (req.method !== 'GET' && req.method !== 'HEAD') return p.startsWith('/api/') ? send(res, 405, 'application/json', JSON.stringify({ error: 'Not allowed' })) : errorPage(res, 405);
     try {
-      if (p === '/') return send(res, 200, html, statusPage());
+      if (p === '/' || p === '/tasks') return send(res, 200, html, tasksPage(url.searchParams));
+      if (p === '/status') return send(res, 200, html, statusPage());
       if (p === '/setup.js') return send(res, 200, 'text/javascript; charset=utf-8', SETUP_JS);
       if (p === '/welcome' && setup) return send(res, 200, html, journeyPage(setup.journeyBody()));
       if (p === '/setup' && setup) return send(res, 200, html, page('Setup', 'Setup', setup.setupBody(), '/setup.js', { title: 'Setup', sub: 'Do the steps in order. A step shows "Complete" when it works. You can come back at any time.' }));
@@ -684,7 +723,6 @@ export function createDashboard({ store, config, status, log, dbFile, pingOllama
         if (!r) return errorPage(res, 404, ['Report not found', `There is no saved report for ${esc(m[1])}. The computer was off at the report time, or the report is older than ${config.retention.reportDays} days.`, '<a class="btn primary" href="/reports">All reports</a>', 'warn']);
         return m[2] ? send(res, 200, html, r.html, { csp: CSP_REPORT, frame: 'SAMEORIGIN' }) : send(res, 200, html, reportView(m[1]));
       }
-      if (p === '/tasks') return send(res, 200, html, tasksPage(url.searchParams));
       if (p === '/logs') return send(res, 200, html, logsPage());
       if (p === '/about') return send(res, 200, html, aboutPage());
       if (p === '/api/update') return send(res, 200, 'application/json', JSON.stringify(await latestRelease()));

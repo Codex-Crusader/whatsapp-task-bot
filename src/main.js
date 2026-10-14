@@ -64,7 +64,7 @@ const batcher = createBatcher({ store, config, extractor, nameOf, meIds, status,
 const calendar = createCalendar({ store, config, env, status, log });
 const reporter = createReporter({ store, config, extractor, nameOf, log });
 mailer = createMailer({ env, status, log });
-const scheduler = createScheduler({ store, config, status, log, reader, flush: ingest.flush, batcher, calendar, reporter, mailer });
+const scheduler = createScheduler({ store, config, status, log, reader, flush: ingest.flush, batcher, calendar, reporter, mailer, pingOllama: extractor.ping });
 
 // The scheduler needs a linked WhatsApp and a name. It starts once both are there.
 let schedulerStarted = false;
