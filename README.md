@@ -11,6 +11,8 @@
 
 <p align="center">
   <a href="https://github.com/Codex-Crusader/whatsapp-task-bot/releases/latest"><img src="https://img.shields.io/github/v/release/Codex-Crusader/whatsapp-task-bot?color=0f766e&label=download" alt="Latest release"></a>
+  <a href="https://github.com/Codex-Crusader/whatsapp-task-bot/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Codex-Crusader/whatsapp-task-bot/ci.yml?branch=main&label=tests" alt="Tests"></a>
+  <a href="https://github.com/Codex-Crusader/whatsapp-task-bot/releases"><img src="https://img.shields.io/github/downloads/Codex-Crusader/whatsapp-task-bot/total?color=2f3640&label=downloads" alt="Total downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-2f3640" alt="License: GPL-3.0"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-2f3640" alt="Platform: Windows 10 and 11">
   <img src="https://img.shields.io/badge/LLM-local%20(Ollama)-2f3640" alt="Local language model with Ollama">
@@ -21,6 +23,8 @@
   <a href="https://github.com/Codex-Crusader/whatsapp-task-bot/releases/latest"><b>Download for Windows</b></a>
   &nbsp;·&nbsp;
   <a href="#install">How to install</a>
+  &nbsp;·&nbsp;
+  <a href="CHANGELOG.md">What is new</a>
   &nbsp;·&nbsp;
   <a href="https://github.com/Codex-Crusader/whatsapp-task-bot/issues/new/choose">Report a problem</a>
 </p>
@@ -35,7 +39,8 @@
 2. Finds tasks with a language model that operates on your computer. Your messages do not go to a cloud service.
 3. Puts your tasks in a Google Calendar of its own, so your phone gives you reminders.
 4. Sends a daily report by email: what happened in each chat, and which tasks are yours.
-5. Shows everything on a local dashboard, where you can edit, complete, and delete tasks.
+5. Shows your tasks on a local dashboard: what is overdue, what is due today, and what needs a review. You can edit, complete, delete, and undo.
+6. Marks uncertain tasks with a "Needs review" warning, and gives each task a tag, such as assignment, exam, or payment.
 
 ## Screenshots
 
@@ -354,6 +359,8 @@ Open the "Needs review" tab on the Tasks page. Click "Confirm" if the task is co
 | `scripts/build-installer.ps1` | Builds the installer with Inno Setup and a checked copy of Node.js |
 | `installer/whatsapp-task-bot.iss` | Installer script |
 | `.github/workflows/release.yml` | Builds the installer and publishes a release when a version tag is pushed |
+| `CHANGELOG.md` | What changed in each release |
+| `CODE_SIGNING.md` | Code signing policy, team roles, and privacy policy |
 | `eval/evaluate.js` | Evaluation script |
 
 `config.example.json` shows all settings. The bot makes `config.json` when you save the setup or the settings.

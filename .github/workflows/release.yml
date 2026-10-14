@@ -44,6 +44,12 @@ jobs:
           $exe = "dist/WhatsApp-Task-Bot-Setup-$v.exe"
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
           "$hash  WhatsApp-Task-Bot-Setup-$v.exe" | Set-Content -Encoding ascii dist/SHA256SUMS.txt
+          # Release notes: the section of CHANGELOG.md for this version.
+          $md = Get-Content CHANGELOG.md -Raw
+          $m = [regex]::Match($md, "(?ms)^## $([regex]::Escape($v)) .*?(?=^## |\z)")
+          $section = if ($m.Success) { $m.Value.Trim() } else { "See CHANGELOG.md." }
+          $notes = "Download ``WhatsApp-Task-Bot-Setup-$v.exe`` below and open it. An update keeps your data.`n`n$section`n`nCode signing policy: https://github.com/Codex-Crusader/whatsapp-task-bot/blob/main/CODE_SIGNING.md"
+          Set-Content -Path dist/notes.md -Value $notes -Encoding utf8
           gh release view $env:GITHUB_REF_NAME 2>$null
-          if ($LASTEXITCODE -ne 0) { gh release create $env:GITHUB_REF_NAME --title "WhatsApp Task Bot $v" --generate-notes --notes "Download WhatsApp-Task-Bot-Setup-$v.exe below. Code signing policy: https://github.com/Codex-Crusader/whatsapp-task-bot/blob/main/CODE_SIGNING.md" }
+          if ($LASTEXITCODE -ne 0) { gh release create $env:GITHUB_REF_NAME --title "WhatsApp Task Bot $v" --notes-file dist/notes.md }
           gh release upload $env:GITHUB_REF_NAME $exe dist/SHA256SUMS.txt --clobber
